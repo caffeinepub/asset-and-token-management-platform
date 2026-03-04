@@ -234,7 +234,7 @@ export const idlService = IDL.Service({
   'registerUser' : IDL.Func([IDL.Text], [IDL.Nat], []),
   'removeProjectMember' : IDL.Func([IDL.Nat, IDL.Principal], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-  'selfAssignAdmin' : IDL.Func([IDL.Nat], [], []),
+  'selfAssignAdmin' : IDL.Func([], [], []),
   'storeFileMetadata' : IDL.Func(
       [IDL.Nat, IDL.Opt(IDL.Nat), IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
       [IDL.Nat],
@@ -489,7 +489,7 @@ export const idlFactory = ({ IDL }) => {
     'registerUser' : IDL.Func([IDL.Text], [IDL.Nat], []),
     'removeProjectMember' : IDL.Func([IDL.Nat, IDL.Principal], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
-    'selfAssignAdmin' : IDL.Func([IDL.Nat], [], []),
+    'selfAssignAdmin' : IDL.Func([], [], []),
     'storeFileMetadata' : IDL.Func(
         [IDL.Nat, IDL.Opt(IDL.Nat), IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
         [IDL.Nat],

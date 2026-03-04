@@ -256,11 +256,7 @@ export interface backendInterface {
     registerUser(username: string): Promise<bigint>;
     removeProjectMember(projectId: bigint, member: Principal): Promise<void>;
     saveCallerUserProfile(profile: UserProfile): Promise<void>;
-    /**
-     * / Allows admins to assign themselves as admin to a project, asset, task, or collection.
-     * / This function is restricted to admins only to prevent privilege escalation.
-     */
-    selfAssignAdmin(entityId: bigint): Promise<void>;
+    selfAssignAdmin(): Promise<void>;
     storeFileMetadata(projectId: bigint, assetId: bigint | null, filename: string, mimeType: string, size: bigint, hash: string): Promise<bigint>;
     updateAsset(id: bigint, name: string, description: string): Promise<void>;
     updateCollection(id: bigint, name: string, description: string, assetIds: Array<bigint>): Promise<void>;
@@ -882,17 +878,17 @@ export class Backend implements backendInterface {
             return result;
         }
     }
-    async selfAssignAdmin(arg0: bigint): Promise<void> {
+    async selfAssignAdmin(): Promise<void> {
         if (this.processError) {
             try {
-                const result = await this.actor.selfAssignAdmin(arg0);
+                const result = await this.actor.selfAssignAdmin();
                 return result;
             } catch (e) {
                 this.processError(e);
                 throw new Error("unreachable");
             }
         } else {
-            const result = await this.actor.selfAssignAdmin(arg0);
+            const result = await this.actor.selfAssignAdmin();
             return result;
         }
     }

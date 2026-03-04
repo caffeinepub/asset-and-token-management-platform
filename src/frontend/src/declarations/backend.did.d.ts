@@ -174,11 +174,7 @@ export interface _SERVICE {
   'registerUser' : ActorMethod<[string], bigint>,
   'removeProjectMember' : ActorMethod<[bigint, Principal], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
-  /**
-   * / Allows admins to assign themselves as admin to a project, asset, task, or collection.
-   * / This function is restricted to admins only to prevent privilege escalation.
-   */
-  'selfAssignAdmin' : ActorMethod<[bigint], undefined>,
+  'selfAssignAdmin' : ActorMethod<[], undefined>,
   'storeFileMetadata' : ActorMethod<
     [bigint, [] | [bigint], string, string, bigint, string],
     bigint

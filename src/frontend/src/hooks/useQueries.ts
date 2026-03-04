@@ -574,9 +574,9 @@ export function useSelfAssignAdmin() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (entityId: bigint) => {
+    mutationFn: async () => {
       if (!actor) throw new Error("Actor not initialized");
-      return actor.selfAssignAdmin(entityId);
+      return actor.selfAssignAdmin();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });

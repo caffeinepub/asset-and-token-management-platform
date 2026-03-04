@@ -1,3 +1,5 @@
+// backend/main.mo
+
 import Time "mo:core/Time";
 import List "mo:core/List";
 import Text "mo:core/Text";
@@ -206,9 +208,6 @@ actor {
     nextAuditId += 1;
   };
 
-  ///////////////////////
-  // USER PROFILE MANAGEMENT (required by frontend)
-
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only users can get their profile");
@@ -230,7 +229,6 @@ actor {
     userProfiles.add(caller, profile);
   };
 
-  // AUDIT LOG PAGINATION
   public shared ({ caller }) func getAuditLogs(page : Nat, pageSize : Nat) : async {
     entries : [AuditLog];
     total : Nat;
@@ -263,8 +261,6 @@ actor {
     };
   };
 
-  // getCallerRole: any principal (including guests) may query their own role.
-  // No authorization check needed.
   public query ({ caller }) func getCallerRole() : async Text {
     let role = AccessControl.getUserRole(accessControlState, caller);
     switch (role) {
@@ -273,9 +269,6 @@ actor {
       case (#guest) { "guest" };
     };
   };
-
-  ///////////////////////
-  // Global querying (read-only, open to all)
 
   public query ({ caller }) func getProject(id : Nat) : async ?Project {
     projects.get(id);
@@ -353,17 +346,10 @@ actor {
     filtered.map(func((_, meta)) { meta });
   };
 
-  ///////////////
-  // AUTHORIZATION HELPERS
-
   func makeMemberKey(projectId : Nat, principal : Principal) : Text {
     projectId.toText() # ":" # principal.toText();
   };
 
-  /////////////
-  // USER & PROJECT CRUD
-
-  // Self-registration: requires #user role (authenticated, non-guest)
   public shared ({ caller }) func registerUser(username : Text) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only authenticated users can register");
@@ -380,7 +366,6 @@ actor {
     userId;
   };
 
-  // Project mutations: require #user role minimum
   public shared ({ caller }) func createProject(name : Text, description : Text) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only authenticated users can create projects");
@@ -421,7 +406,6 @@ actor {
     };
   };
 
-  // Delete project: admin only
   public shared ({ caller }) func deleteProject(id : Nat) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Only admins can delete projects");
@@ -433,9 +417,6 @@ actor {
       Runtime.trap("Project not found");
     };
   };
-
-  /////////////
-  // ASSET MGMT
 
   public shared ({ caller }) func createAsset(projectId : Nat, name : Text, description : Text) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
@@ -479,7 +460,6 @@ actor {
     };
   };
 
-  // Delete asset: admin only
   public shared ({ caller }) func deleteAsset(id : Nat) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Only admins can delete assets");
@@ -491,9 +471,6 @@ actor {
       Runtime.trap("Asset not found");
     };
   };
-
-  //////////////
-  // TASK MGMT
 
   public shared ({ caller }) func createTask(projectId : Nat, assetId : ?Nat, name : Text, description : Text, status : Text, assignedTo : ?Principal) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
@@ -545,7 +522,6 @@ actor {
     };
   };
 
-  // Delete task: admin only
   public shared ({ caller }) func deleteTask(id : Nat) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Only admins can delete tasks");
@@ -557,9 +533,6 @@ actor {
       Runtime.trap("Task not found");
     };
   };
-
-  ///////////////
-  // COLLECTIONS
 
   public shared ({ caller }) func createCollection(projectId : Nat, name : Text, description : Text, assetIds : [Nat]) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
@@ -608,7 +581,6 @@ actor {
     };
   };
 
-  // Delete collection: admin only
   public shared ({ caller }) func deleteCollection(id : Nat) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Only admins can delete collections");
@@ -620,9 +592,6 @@ actor {
       Runtime.trap("Collection not found");
     };
   };
-
-  ////////////////////////
-  // PROJECT MEMBER ROLES (admin only for mutations)
 
   public shared ({ caller }) func addProjectMember(projectId : Nat, member : Principal, role : ProjectRole) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
@@ -688,54 +657,21 @@ actor {
     };
   };
 
-  ////////////////////////
-  // SELF ADMIN ASSIGNMENT
-
-  /// Allows admins to assign themselves as admin to a project, asset, task, or collection.
-  /// This function is restricted to admins only to prevent privilege escalation.
-  public shared ({ caller }) func selfAssignAdmin(entityId : Nat) : async () {
-    // FIXED: Require admin permission instead of just user permission
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can call selfAssignAdmin");
+  public shared ({ caller }) func selfAssignAdmin() : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: must be authenticated to call selfAssignAdmin");
     };
-    let hasAnyEntity = switch (projects.get(entityId)) {
-      case (?_) { true };
-      case (null) {
-        switch (assets.get(entityId)) {
-          case (?_) { true };
-          case (null) {
-            switch (tasks.get(entityId)) {
-              case (?_) { true };
-              case (null) { collections.containsKey(entityId) };
-            };
-          };
-        };
-      };
-    };
-    if (not hasAnyEntity) {
-      Runtime.trap("Entity not found: no project, asset, task, or collection with this ID");
-    };
-    let key = makeMemberKey(entityId, caller);
-    let projectMember : ProjectMember = {
-      projectId = entityId;
-      member = caller;
-      role = #admin;
-      addedAt = Time.now();
-      addedBy = caller;
-    };
-    projectMembers.add(key, projectMember);
+    accessControlState.userRoles.add(caller, #admin);
     let logEntry : AuditLog = {
       timestamp = Time.now();
       principal = caller;
       action = "adminSelfAssign";
-      entity = entityId.toText();
+      entity = caller.toText();
     };
     auditLogs.add(nextAuditLogId, logEntry);
     nextAuditLogId += 1;
   };
 
-  /////////////////////////////
-  // FILE & METADATA MGMT
   public shared ({ caller }) func storeFileMetadata(projectId : Nat, assetId : ?Nat, filename : Text, mimeType : Text, size : Nat, hash : Text) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only authenticated users can store file metadata");
@@ -757,7 +693,6 @@ actor {
     fileId;
   };
 
-  // Delete file metadata: admin only
   public shared ({ caller }) func deleteFileMetadata(id : Nat) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
       Runtime.trap("Unauthorized: Only admins can delete file metadata");
@@ -769,10 +704,6 @@ actor {
     };
   };
 
-  ///////////////////////////
-  // TOKEN MANAGEMENT
-
-  // mintToken: admin only
   public shared ({ caller }) func mintToken(projectId : Nat, name : Text, description : Text, metadata : Text) : async {
     #ok : Token;
     #err : Text;
@@ -808,4 +739,4 @@ actor {
   public query ({ caller }) func listTokensByProject(projectId : Nat) : async [Token] {
     tokens.values().toArray().filter(func(token) { token.projectId == projectId });
   };
-};
+}
