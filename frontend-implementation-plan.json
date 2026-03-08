@@ -1,0 +1,25 @@
+{
+  "kind": "implementation_plan",
+  "version": "1.0",
+  "title": "Fix Select.Item empty value error in New Task dialog",
+  "requirements": [
+    {
+      "id": "REQ-29",
+      "summary": "Fix the Select component in TaskDialog.tsx so that no <Select.Item> has an empty string value prop, replacing empty-string placeholder options with the correct Shadcn Select placeholder pattern using either the Select's placeholder prop or a disabled sentinel value item, and update form state and submission logic to correctly map placeholder selections to null/empty values when submitting tasks.",
+      "acceptanceCriteria": [
+        "Opening the New Task dialog no longer produces the Select.Item empty value React error in the console.",
+        "All <Select.Item> components in TaskDialog.tsx have non-empty string value props.",
+        "The placeholder/default state for Select fields (e.g., asset, assignee) is handled via the Select placeholder prop or a sentinel value, not an empty string item.",
+        "Submitting a task with no asset or assignee selected correctly sends a null/empty optional value to the backend.",
+        "Existing task creation and editing functionality continues to work correctly end-to-end."
+      ],
+      "file_operations": [
+        {
+          "path": "frontend/src/components/TaskDialog.tsx",
+          "operation": "modify",
+          "description": "Replace any <Select.Item> components with empty string value props with non-empty sentinel values (e.g., 'none', 'unassigned'). Update the asset Select to either use the placeholder prop or a disabled placeholder item with value='none'. Update the assignee Select similarly. Modify the form state initialization and submission logic to correctly map sentinel values ('none', 'unassigned') to null when calling createTask or updateTask, ensuring that optional fields (assetId, assignedTo) are passed as null when no selection is made. Verify the Shadcn Select component's usage instructions before implementing to ensure correct placeholder handling."
+        }
+      ]
+    }
+  ]
+}

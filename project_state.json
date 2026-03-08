@@ -1,0 +1,240 @@
+{
+  "schemaVersion": "1.0.0",
+  "projectStateVersion": 13,
+  "summary": "Motoko backend for asset and token management platform - All backend steps (1, 2a, 2b-i, 2b-ii) COMPLETED. Frontend wiring COMPLETED (Version 5 live). MVP 1.0 near-complete pending fix of Select.Item empty value bug in New Task dialog.",
+  "architectural_notes": [
+    "Motoko backend targeting ~1100 lines total, split into 2 steps to avoid complexity constraints",
+    "Step 1 (~400-500 lines): Foundation with Project/Asset/User/AuditEntry entities, stable storage, CRUD, audit logging",
+    "All storage uses stable HashMaps with sequential ID counters for stable-safe persistence",
+    "Hierarchy: Projects → Assets (simplified, no Portfolio/Program layers)",
+    "Token minting uses simple counter (nextTokenId), no external IC token standards",
+    "File storage: metadata/references only, assumes separate storage canister for actual blobs",
+    "Audit logging: immutable append-only log for all operations",
+    "Step 2 split into 2a (~300-400 lines) and 2b (~300-400 lines) to manage complexity",
+    "Step 2a: Remaining entities + CRUD for Tasks and Collections",
+    "Step 2b split into 2b-i (RBAC + File Metadata, ~200 lines) and 2b-ii (Token Minting + Enhanced Auth, ~200 lines) due to complexity limits"
+  ],
+  "known_issues": [
+    "New Task dialog: Select.Item has empty string value causing React error - must use placeholder prop instead of empty string value option"
+  ],
+  "isFixRequest": true,
+  "existing_features": [
+    {
+      "id": "feature-add-react-query-hooks-for-minttoken-gettoken-and-listtokensbyproject-in-usequeries-ts-following-the-existing-crud-hook-patterns-used-for-assets-tasks-and-collections",
+      "title": "Add React Query hooks for mintToken, getToken, and listTokensByProject in useQueries.ts following the existing CRUD hook patterns used for Assets, Tasks, and Collections.",
+      "reqIds": [
+        "REQ-20"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-react-query-hooks-in-usequeries-ts-for-all-filemetadata-backend-operations-listfilemetadata-query-uploadfilemetadata-mutation-deletefilemetadata-mutation-following-the-existing-crud-hook-patterns-used-for-assets-tasks-and-collections",
+      "title": "Add React Query hooks in useQueries.ts for all FileMetadata backend operations: listFileMetadata (query), uploadFileMetadata (mutation), deleteFileMetadata (mutation), following the existing CRUD hook patterns used for Assets, Tasks, and Collections.",
+      "reqIds": [
+        "REQ-21"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-a-react-query-hook-in-usequeries-ts-for-reading-the-caller-s-role-from-the-backend-e-g-getmyrole-or-getuserrole-query-returning-the-principal-s-current-role-string-admin-member-or-guest",
+      "title": "Add a React Query hook in useQueries.ts for reading the caller's role from the backend (e.g., getMyRole or getUserRole query), returning the principal's current role string (admin, member, or guest).",
+      "reqIds": [
+        "REQ-22"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-create-a-tokenspage-tsx-page-component-that-lists-all-tokens-for-the-current-project-using-the-existing-uselisttokensbyproject-hook-and-includes-a-mint-token-dialog-name-description-fields-that-calls-the-useminttoken-mutation-the-mint-button-must-only-be-visible-enabled-when-the-caller-s-role-is-admin",
+      "title": "Create a TokensPage.tsx page component that lists all tokens for the current project using the existing useListTokensByProject hook, and includes a mint-token dialog (name, description fields) that calls the useMintToken mutation. The mint button must only be visible/enabled when the caller's role is admin.",
+      "reqIds": [
+        "REQ-23"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-create-a-filemetadatapage-tsx-page-component-that-lists-all-file-metadata-records-for-the-current-project-using-the-uselistfilemetadata-hook-and-supports-uploading-new-file-metadata-records-and-deleting-existing-ones",
+      "title": "Create a FileMetadataPage.tsx page component that lists all file metadata records for the current project using the useListFileMetadata hook, and supports uploading new file metadata records and deleting existing ones.",
+      "reqIds": [
+        "REQ-24"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-update-projectcard-tsx-to-add-a-navigation-button-for-tokens-and-a-navigation-button-for-files-linking-to-the-new-tokenspage-and-filemetadatapage-routes-for-the-given-project-consistent-with-the-existing-assets-tasks-and-collections-navigation-buttons",
+      "title": "Update ProjectCard.tsx to add a navigation button for 'Tokens' and a navigation button for 'Files', linking to the new TokensPage and FileMetadataPage routes for the given project, consistent with the existing Assets, Tasks, and Collections navigation buttons.",
+      "reqIds": [
+        "REQ-25"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-register-the-new-tokenspage-and-filemetadatapage-in-app-tsx-as-routes-following-the-same-routing-pattern-used-for-assetspage-taskspage-and-collectionspage-route-paths-must-include-projectid-as-a-url-parameter",
+      "title": "Register the new TokensPage and FileMetadataPage in App.tsx as routes, following the same routing pattern used for AssetsPage, TasksPage, and CollectionsPage (route paths must include projectId as a URL parameter).",
+      "reqIds": [
+        "REQ-26"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-apply-role-aware-visibility-across-all-existing-pages-hide-or-disable-create-edit-delete-action-buttons-on-projectspage-assetspage-taskspage-and-collectionspage-for-users-whose-role-is-not-admin-or-member-use-the-usemyrole-hook-to-gate-these-controls",
+      "title": "Apply role-aware visibility across all existing pages: hide or disable create/edit/delete action buttons on ProjectsPage, AssetsPage, TasksPage, and CollectionsPage for users whose role is not 'admin' or 'member'. Use the useMyRole hook to gate these controls.",
+      "reqIds": [
+        "REQ-27"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-add-consistent-backend-error-handling-across-all-mutation-hooks-in-usequeries-ts-when-the-backend-returns-a-err-message-variant-surface-the-error-message-via-the-mutation-s-error-state-so-that-page-components-can-display-it-to-the-user",
+      "title": "Add consistent backend error handling across all mutation hooks in useQueries.ts: when the backend returns a #err(message) variant, surface the error message via the mutation's error state so that page components can display it to the user.",
+      "reqIds": [
+        "REQ-28"
+      ],
+      "version": 1
+    },
+    {
+      "id": "feature-in-taskdialog-tsx-fix-the-select-component-so-that-no-select-item-has-an-empty-string-value-prop-replace-any-empty-string-value-option-used-as-a-placeholder-default-with-the-correct-shadcn-select-placeholder-pattern-use-the-select-s-placeholder-prop-or-a-disabled-placeholder-item-with-a-non-empty-sentinel-value-e-g-none-or-unassigned-and-update-the-form-state-and-submission-logic-accordingly-so-that-selecting-the-placeholder-correctly-maps-to-an-empty-null-value-when-submitting-the-task",
+      "title": "In TaskDialog.tsx, fix the Select component so that no <Select.Item> has an empty string value prop. Replace any empty-string value option (used as a placeholder/default) with the correct Shadcn Select placeholder pattern: use the Select's placeholder prop or a disabled placeholder item with a non-empty sentinel value (e.g., 'none' or 'unassigned'), and update the form state and submission logic accordingly so that selecting the placeholder correctly maps to an empty/null value when submitting the task.",
+      "reqIds": [
+        "REQ-29"
+      ],
+      "version": 1
+    }
+  ],
+  "new_feature_requests": [
+    {
+      "id": "AR-15",
+      "summary": "Step 2a: Define remaining entity types (Task, Collection, ValidationRule, TransitionRule, MergeOperation)",
+      "reqIds": [],
+      "status": "in_progress"
+    },
+    {
+      "id": "AR-16",
+      "summary": "Step 2a: Stable storage setup for new entities with HashMaps and ID counters",
+      "reqIds": [],
+      "status": "in_progress"
+    },
+    {
+      "id": "AR-17",
+      "summary": "Step 2a: CRUD operations for Tasks (linked to projects and assets)",
+      "reqIds": [],
+      "status": "in_progress"
+    },
+    {
+      "id": "AR-18",
+      "summary": "Step 2a: CRUD operations for Collections",
+      "reqIds": [],
+      "status": "in_progress"
+    },
+    {
+      "id": "AR-22",
+      "summary": "Define Task entity type with fields: id (Nat), projectId (Nat), assetId (optional Nat), name (Text), description (Text), status (Text with values like 'pending', 'in-progress', 'completed'), assignedTo (optional Principal), createdAt (Int), updatedAt (Int), createdBy (Principal)",
+      "reqIds": [
+        "REQ-8"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-23",
+      "summary": "Define Collection entity type with fields: id (Nat), projectId (Nat), name (Text), description (Text), assetIds (Array of Nat), createdAt (Int), updatedAt (Int), createdBy (Principal)",
+      "reqIds": [
+        "REQ-9"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-24",
+      "summary": "Define ValidationRule entity type with fields: id (Nat), projectId (Nat), name (Text), ruleType (Text), conditions (Text as JSON-serialized rule definition), createdAt (Int), createdBy (Principal)",
+      "reqIds": [
+        "REQ-10"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-25",
+      "summary": "Define TransitionRule entity type with fields: id (Nat), projectId (Nat), name (Text), fromStatus (Text), toStatus (Text), conditions (Text as JSON-serialized conditions), createdAt (Int), createdBy (Principal)",
+      "reqIds": [
+        "REQ-11"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-26",
+      "summary": "Define MergeOperation entity type with fields: id (Nat), projectId (Nat), sourceAssetIds (Array of Nat), targetAssetId (Nat), status (Text with values like 'pending', 'completed', 'failed'), createdAt (Int), completedAt (optional Int), createdBy (Principal)",
+      "reqIds": [
+        "REQ-12"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-27",
+      "summary": "Set up stable storage for new entities using HashMap structures: tasks (Nat -> Task), collections (Nat -> Collection), validationRules (Nat -> ValidationRule), transitionRules (Nat -> TransitionRule), mergeOperations (Nat -> MergeOperation), with corresponding ID counters: nextTaskId, nextCollectionId, nextValidationRuleId, nextTransitionRuleId, nextMergeOperationId",
+      "reqIds": [
+        "REQ-13"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-28",
+      "summary": "Implement CRUD operations for Tasks: createTask (projectId, optional assetId, name, description, status, optional assignedTo), getTask (taskId), listTasksByProject (projectId), updateTask (taskId, name, description, status, assignedTo), deleteTask (taskId). All operations must validate that the project exists and log audit entries.",
+      "reqIds": [
+        "REQ-14"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-29",
+      "summary": "Implement CRUD operations for Collections: createCollection (projectId, name, description, assetIds), getCollection (collectionId), listCollectionsByProject (projectId), updateCollection (collectionId, name, description, assetIds), deleteCollection (collectionId). All operations must validate that the project exists and log audit entries.",
+      "reqIds": [
+        "REQ-15"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-32",
+      "summary": "Step 2b-ii: Token minting with counter-based IDs (admin-only), getToken, listTokensByProject, plus enhanced authorization checks on all existing operations",
+      "reqIds": [],
+      "status": "pending"
+    },
+    {
+      "id": "AR-33",
+      "summary": "Define a Token entity type with fields: id (Nat), projectId (Nat), name (Text), description (Text), mintedBy (Principal), mintedAt (Int), and any relevant metadata fields. Set up stable storage for tokens using a HashMap (Nat -> Token) and a nextTokenId counter.",
+      "reqIds": [
+        "REQ-16"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-34",
+      "summary": "Implement mintToken function restricted to admin role only. mintToken accepts (projectId, name, description) parameters, validates the project exists, checks that the caller has the admin role via requireRole, assigns a counter-based ID, stores the token, logs an audit entry, and returns the new token or an error.",
+      "reqIds": [
+        "REQ-17"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-35",
+      "summary": "Implement getToken (tokenId: Nat) query function that returns the token record or an error if not found, and listTokensByProject (projectId: Nat) query function that returns all tokens associated with the given project.",
+      "reqIds": [
+        "REQ-18"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-36",
+      "summary": "Apply authorization checks to existing Project, Asset, Task, Collection, and FileMetadata create/update/delete operations. Use the requireRole pattern from Step 2b-i to gate mutations behind appropriate roles (e.g., admin or member as appropriate). Return consistent #err(\"Unauthorized: insufficient role\") responses for callers lacking the required role.",
+      "reqIds": [
+        "REQ-19"
+      ],
+      "status": "pending"
+    },
+    {
+      "id": "AR-37",
+      "summary": "Wire React/TypeScript frontend to all Motoko backend operations: Projects, Assets, Tasks, Collections, Tokens, FileMetadata, Auth/Roles using React Query hooks, canister actor calls, and a functional role-aware UI layout",
+      "reqIds": [],
+      "status": "in_progress"
+    }
+  ],
+  "projectName": "Asset and Token Management Platform",
+  "clarification_mode": "instant",
+  "clarification_rounds": 0
+}

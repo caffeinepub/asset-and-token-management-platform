@@ -1,0 +1,40 @@
+{
+  "kind": "build_request",
+  "title": "Fix Select.Item empty value error in New Task dialog",
+  "priority": "high",
+  "requirements": [
+    {
+      "id": "REQ-29",
+      "text": "In TaskDialog.tsx, fix the Select component so that no <Select.Item> has an empty string value prop. Replace any empty-string value option (used as a placeholder/default) with the correct Shadcn Select placeholder pattern: use the Select's placeholder prop or a disabled placeholder item with a non-empty sentinel value (e.g., 'none' or 'unassigned'), and update the form state and submission logic accordingly so that selecting the placeholder correctly maps to an empty/null value when submitting the task.",
+      "target": "frontend",
+      "source": {
+        "messageIds": [
+          "msg-4"
+        ],
+        "quotes": [
+          "New tasks button shows error \"A <Select.Item /> must have a value prop that is not an empty string. This is because the Select value can be set to an empty string to clear the selection and show the placeholder.\""
+        ]
+      },
+      "acceptanceCriteria": [
+        "Opening the New Task dialog no longer produces the Select.Item empty value React error in the console.",
+        "All <Select.Item> components in TaskDialog.tsx have non-empty string value props.",
+        "The placeholder/default state for Select fields (e.g., asset, assignee) is handled via the Select placeholder prop or a sentinel value, not an empty string item.",
+        "Submitting a task with no asset or assignee selected correctly sends a null/empty optional value to the backend.",
+        "Existing task creation and editing functionality continues to work correctly end-to-end."
+      ]
+    }
+  ],
+  "constraints": [
+    "Do not modify any files under frontend/src/hooks/useInternetIdentity.ts, frontend/src/hooks/useActor.ts, frontend/src/main.tsx, or frontend/src/components/ui.",
+    "Do not change the backend schema or any Motoko files."
+  ],
+  "nonGoals": [
+    "Adding new fields or changing the task data model.",
+    "Modifying any page other than TaskDialog.tsx.",
+    "Any new features beyond this bug fix."
+  ],
+  "imageRequirements": {
+    "required": [],
+    "edits": []
+  }
+}

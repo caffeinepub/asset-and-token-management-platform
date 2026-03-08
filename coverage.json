@@ -1,0 +1,37 @@
+{
+  "kind": "coverage_report",
+  "version": "1.0",
+  "generatedAt": "2026-02-26T03:31:54.139Z",
+  "sources": {
+    "buildRequest": true,
+    "implementationPlan": true
+  },
+  "requirements": {
+    "total": 1,
+    "implemented": 1,
+    "items": [
+      {
+        "id": "REQ-29",
+        "summary": "In TaskDialog.tsx, fix the Select component so that no <Select.Item> has an empty string value prop. Replace any empty-string value option (used as a placeholder/default) with the correct Shadcn Select placeholder pattern: use the Select's placeholder prop or a disabled placeholder item with a non-empty sentinel value (e.g., 'none' or 'unassigned'), and update the form state and submission logic accordingly so that selecting the placeholder correctly maps to an empty/null value when submitting the task.",
+        "status": "implemented",
+        "plannedFiles": [
+          "frontend/src/components/TaskDialog.tsx"
+        ],
+        "matchedFiles": [
+          "frontend/src/components/TaskDialog.tsx"
+        ]
+      }
+    ]
+  },
+  "changedFiles": [
+    "build-request.json",
+    "feature_evidence.json",
+    "frontend-file-summaries.txt",
+    "frontend-implementation-plan.json",
+    "frontend/src/components/TaskDialog.tsx",
+    "project_state.json",
+    "scratch/component-selection.json",
+    "spec.md",
+    "spec_vs_diff_report.json"
+  ]
+}

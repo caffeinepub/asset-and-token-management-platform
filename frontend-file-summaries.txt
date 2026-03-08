@@ -1,0 +1,22 @@
+{
+  "frontend/src/App.tsx": "Main application component with TanStack Router setup, QueryClientProvider, ThemeProvider, and routes for all pages including the new TokensPage (`/tokens/$projectId`) and FileMetadataPage (`/files/$projectId`). Uses a Layout component with `<Outlet />` for proper route rendering.",
+  "frontend/src/components/Header.tsx": "Navigation header component with app branding, Internet Identity login/logout functionality, and theme toggle.",
+  "frontend/src/components/Footer.tsx": "Footer component with copyright notice and attribution link to caffeine.ai with UTM tracking.",
+  "frontend/src/components/ThemeToggle.tsx": "Theme toggle button component that switches between light and dark modes using next-themes.",
+  "frontend/src/components/ProjectCard.tsx": "Reusable project card component with navigation buttons for Assets, Tasks, Collections, Tokens, and Files pages, plus conditional Edit/Delete actions controlled by a `canMutate` prop.",
+  "frontend/src/components/ProjectDialog.tsx": "Modal dialog component for creating and editing projects with form validation and loading states.",
+  "frontend/src/components/AssetDialog.tsx": "Modal dialog component for creating and editing assets with form validation and loading states.",
+  "frontend/src/pages/ProjectsPage.tsx": "Main projects page with role-aware UI — Create/Edit/Delete buttons are only shown when the user's role is `admin` or `user` via the `useMyRole` hook.",
+  "frontend/src/pages/AssetsPage.tsx": "Assets page with role-aware Create/Edit/Delete buttons that are only shown when the user's role is `admin` or `user`, with improved error message display from backend errors.",
+  "frontend/src/hooks/useQueries.ts": "Custom React Query hooks for all backend operations including CRUD for projects, assets, tasks, collections, tokens, and file metadata, plus a `useMyRole` hook that fetches the caller's role via `getCallerUserRole`.",
+  "frontend/src/index.css": "Global styles with OKLCH color system customized with a modern blue/purple color palette for both light and dark modes.",
+  "frontend/tailwind.config.js": "Tailwind configuration with extended color tokens, border radius, and animation settings matching the design system.",
+  "frontend/src/pages/TasksPage.tsx": "Tasks page with role-aware Create/Edit/Delete buttons that are only shown when the user's role is `admin` or `user`, with improved error message display from backend errors.",
+  "frontend/src/pages/CollectionsPage.tsx": "Collections page with role-aware Create/Edit/Delete buttons that are only shown when the user's role is `admin` or `user`, with improved error message display from backend errors.",
+  "frontend/src/components/TaskDialog.tsx": "Modal dialog for creating and editing tasks with form fields for name, description, status, optional asset linking, and optional assignee. Fixed the Select.Item empty-string value error by replacing the empty `value=\"\"` on the \"None\" asset option with a `\"none\"` sentinel constant, and updated form state initialization and submission logic to map the sentinel back to `null` when calling the backend.",
+  "frontend/src/components/CollectionDialog.tsx": "Modal dialog component for creating and editing collections with form validation and multi-select checkbox interface for selecting assets to include.",
+  "frontend/src/components/TokenDialog.tsx": "Modal dialog component for minting tokens with name (required) and description fields, loading state support, and cancel/submit actions.",
+  "frontend/src/pages/TokensPage.tsx": "Tokens page displaying all tokens for a project with token details (id, name, description, mintedBy, mintedAt), a Mint Token button visible only to admins, inline error display, and a read-only notice for non-admins.",
+  "frontend/src/components/FileMetadataDialog.tsx": "Modal dialog component for uploading file metadata with fields for filename (required), MIME type, file size (bytes), and hash, with loading state support.",
+  "frontend/src/pages/FileMetadataPage.tsx": "File metadata page displaying all file records for a project in a table with filename, MIME type, size, hash, upload date, and uploader columns, with Upload and Delete actions gated by role."
+}
