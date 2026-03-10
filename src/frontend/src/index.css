@@ -2,6 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Fraunces display font ────────────────────────────────────────────── */
+@font-face {
+  font-family: "Fraunces";
+  src: url("/assets/fonts/Fraunces.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Figtree body font ────────────────────────────────────────────────── */
+@font-face {
+  font-family: "Figtree";
+  src: url("/assets/fonts/Figtree.woff2") format("woff2");
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @layer base {
   :root {
     --radius: 0.5rem;
@@ -79,5 +97,109 @@
   }
   body {
     @apply bg-background text-foreground;
+    font-family: "Figtree", system-ui, sans-serif;
   }
+}
+
+/* ── Landing page styles ─────────────────────────────────────────────── */
+.landing-page {
+  background: #09090f;
+}
+
+.landing-bg-base {
+  background: radial-gradient(
+    ellipse 80% 60% at 50% 40%,
+    rgba(15, 12, 30, 0.95) 0%,
+    #09090f 70%
+  );
+}
+
+.landing-bg-glow {
+  background: radial-gradient(
+    ellipse 50% 40% at 50% 50%,
+    rgba(99, 102, 241, 0.08) 0%,
+    transparent 70%
+  );
+}
+
+.landing-bg-grid {
+  background-image: linear-gradient(
+      rgba(255, 255, 255, 0.05) 1px,
+      transparent 1px
+    ), linear-gradient(90deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  background-size: 64px 64px;
+}
+
+.landing-orb-1 {
+  width: 480px;
+  height: 480px;
+  border-radius: 50%;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -60%);
+  filter: blur(120px);
+  opacity: 0.06;
+}
+
+.landing-orb-2 {
+  width: 320px;
+  height: 320px;
+  border-radius: 50%;
+  top: 70%;
+  left: 55%;
+  transform: translate(-50%, -50%);
+  filter: blur(80px);
+  opacity: 0.04;
+}
+
+.landing-icon-ring {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(8px);
+}
+
+.landing-heading {
+  font-family: "Fraunces", serif;
+  letter-spacing: -0.03em;
+  text-shadow: 0 0 80px currentColor;
+  line-height: 1;
+}
+
+.landing-tagline {
+  color: rgba(255, 255, 255, 0.55);
+  font-family: "Figtree", system-ui, sans-serif;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.landing-cta {
+  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
+}
+
+.landing-cta:hover:not(:disabled) {
+  transform: translateY(-1px) scale(1.02);
+  filter: brightness(1.1);
+}
+
+.landing-cta:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.landing-footnote {
+  color: rgba(255, 255, 255, 0.25);
+  font-family: "Figtree", system-ui, sans-serif;
+}
+
+.landing-attribution {
+  color: rgba(255, 255, 255, 0.2);
+  font-family: "Figtree", system-ui, sans-serif;
+}
+
+.landing-attribution-link {
+  color: rgba(255, 255, 255, 0.35);
+  transition: color 0.15s ease;
+}
+
+.landing-attribution-link:hover {
+  color: rgba(255, 255, 255, 0.6);
 }

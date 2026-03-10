@@ -1,7 +1,9 @@
 import { type Project, UserRole } from "@/backend";
+import AccountPanel from "@/components/AccountPanel";
 import DevToolsPanel from "@/components/DevToolsPanel";
 import ProjectCard from "@/components/ProjectCard";
 import ProjectDialog from "@/components/ProjectDialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   useAssetsByProject,
@@ -11,7 +13,13 @@ import {
   useProjects,
   useUpdateProject,
 } from "@/hooks/useQueries";
-import { FolderOpen, Loader2, Plus } from "lucide-react";
+import {
+  AlertCircle,
+  FolderOpen,
+  Loader2,
+  Plus,
+  TrendingUp,
+} from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -42,6 +50,8 @@ function ProjectCardWrapper({
 export default function ProjectsPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [showLimitError, setShowLimitError] = useState(false);
+  const [accountPanelOpen, setAccountPanelOpen] = useState(false);
 
   const { data: projects, isLoading } = useProjects();
   const { data: role } = useMyRole();
@@ -60,19 +70,33 @@ export default function ProjectsPage() {
           description,
         });
         toast.success("Project updated successfully");
+        setDialogOpen(false);
+        setEditingProject(null);
       } else {
         await createProject.mutateAsync({ name, description });
         toast.success("Project created successfully");
+        setShowLimitError(false);
+        setDialogOpen(false);
+        setEditingProject(null);
       }
-      setDialogOpen(false);
-      setEditingProject(null);
-    } catch (error: any) {
-      toast.error(
-        error?.message ||
-          (editingProject
-            ? "Failed to update project"
-            : "Failed to create project"),
-      );
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : "";
+      const isLimitError =
+        errorMsg.toLowerCase().includes("limit") ||
+        errorMsg.toLowerCase().includes("subscription tier") ||
+        errorMsg.toLowerCase().includes("project limit") ||
+        errorMsg.toLowerCase().includes("maximum");
+      if (isLimitError && !editingProject) {
+        setShowLimitError(true);
+        setDialogOpen(false);
+      } else {
+        toast.error(
+          errorMsg ||
+            (editingProject
+              ? "Failed to update project"
+              : "Failed to create project"),
+        );
+      }
     }
   };
 
@@ -128,6 +152,32 @@ export default function ProjectsPage() {
             </Button>
           )}
         </div>
+
+        {showLimitError && (
+          <Alert
+            variant="destructive"
+            className="mt-4"
+            data-ocid="project.create.limit_error"
+          >
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription className="flex items-center justify-between gap-3 flex-wrap">
+              <span>
+                You've reached your project limit. Upgrade your plan to create
+                more projects.
+              </span>
+              <Button
+                data-ocid="project.create.upgrade.button"
+                variant="outline"
+                size="sm"
+                className="shrink-0 border-destructive text-destructive hover:bg-destructive/10"
+                onClick={() => setAccountPanelOpen(true)}
+              >
+                <TrendingUp className="h-3.5 w-3.5 mr-1.5" />
+                Upgrade Plan
+              </Button>
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
       {projects && projects.length > 0 ? (
@@ -162,16 +212,19 @@ export default function ProjectsPage() {
         </div>
       )}
 
-      <div className="mt-12">
-        <DevToolsPanel />
-      </div>
-
       <ProjectDialog
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         onSubmit={handleCreateOrUpdate}
         project={editingProject}
         isLoading={createProject.isPending || updateProject.isPending}
+      />
+
+      <DevToolsPanel />
+
+      <AccountPanel
+        open={accountPanelOpen}
+        onOpenChange={setAccountPanelOpen}
       />
     </div>
   );

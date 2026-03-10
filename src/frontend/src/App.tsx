@@ -1,10 +1,14 @@
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
 import { Toaster } from "@/components/ui/sonner";
+import { useInternetIdentity } from "@/hooks/useInternetIdentity";
 import AssetsPage from "@/pages/AssetsPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import CollectionsPage from "@/pages/CollectionsPage";
 import FileMetadataPage from "@/pages/FileMetadataPage";
+import LandingPage from "@/pages/LandingPage";
+import PaymentFailurePage from "@/pages/PaymentFailurePage";
+import PaymentSuccessPage from "@/pages/PaymentSuccessPage";
 import ProjectsPage from "@/pages/ProjectsPage";
 import TasksPage from "@/pages/TasksPage";
 import TokensPage from "@/pages/TokensPage";
@@ -15,8 +19,10 @@ import {
   createRootRoute,
   createRoute,
   createRouter,
+  useNavigate,
 } from "@tanstack/react-router";
 import { ThemeProvider } from "next-themes";
+import { useEffect } from "react";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +38,21 @@ function Layout() {
   );
 }
 
+/** Guards the root "/" route — redirects unauthenticated visitors to "/landing" */
+function ProtectedIndex() {
+  const { identity, isInitializing } = useInternetIdentity();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!isInitializing && !identity) {
+      navigate({ to: "/landing" });
+    }
+  }, [isInitializing, identity, navigate]);
+
+  if (isInitializing || !identity) return null;
+  return <ProjectsPage />;
+}
+
 const rootRoute = createRootRoute({
   component: Layout,
 });
@@ -39,7 +60,13 @@ const rootRoute = createRootRoute({
 const indexRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: "/",
-  component: ProjectsPage,
+  component: ProtectedIndex,
+});
+
+const landingRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/landing",
+  component: LandingPage,
 });
 
 const assetsRoute = createRoute({
@@ -78,14 +105,29 @@ const auditLogRoute = createRoute({
   component: AuditLogPage,
 });
 
+const paymentSuccessRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payment-success",
+  component: PaymentSuccessPage,
+});
+
+const paymentFailureRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: "/payment-failure",
+  component: PaymentFailurePage,
+});
+
 const routeTree = rootRoute.addChildren([
   indexRoute,
+  landingRoute,
   assetsRoute,
   tasksRoute,
   collectionsRoute,
   tokensRoute,
   filesRoute,
   auditLogRoute,
+  paymentSuccessRoute,
+  paymentFailureRoute,
 ]);
 
 const router = createRouter({ routeTree });

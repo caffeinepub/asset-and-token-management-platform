@@ -1,18 +1,20 @@
-// backend/main.mo
-
 import Time "mo:core/Time";
 import List "mo:core/List";
 import Text "mo:core/Text";
-import Array "mo:core/Array";
 import Principal "mo:core/Principal";
 import Runtime "mo:core/Runtime";
 import Map "mo:core/Map";
 import Nat "mo:core/Nat";
-import Iter "mo:core/Iter";
+import Array "mo:core/Array";
 import MixinAuthorization "authorization/MixinAuthorization";
 import AccessControl "authorization/access-control";
+import Stripe "stripe/stripe";
+import OutCall "http-outcalls/outcall";
 
 actor {
+  //////////////////////
+  // TYPES
+
   public type Project = {
     id : Nat;
     name : Text;
@@ -35,23 +37,6 @@ actor {
     principal : Principal;
     username : Text;
     createdAt : Time.Time;
-  };
-
-  public type AuditEntry = {
-    id : Nat;
-    timestamp : Time.Time;
-    operation : Text;
-    entityType : Text;
-    entityId : Nat;
-    userId : ?Nat;
-    details : ?Text;
-  };
-
-  public type AuditLog = {
-    timestamp : Int;
-    principal : Principal;
-    action : Text;
-    entity : Text;
   };
 
   public type Task = {
@@ -137,11 +122,43 @@ actor {
     username : Text;
   };
 
+  public type AuditLog = {
+    timestamp : Int;
+    principal : Principal;
+    action : Text;
+    entity : Text;
+  };
+
+  public type ProjectRole = { #admin; #editor; #viewer };
+
+  public type ProjectMember = {
+    projectId : Nat;
+    member : Principal;
+    role : ProjectRole;
+    addedAt : Int;
+    addedBy : Principal;
+  };
+
+  public type SubscriptionTier = { #free; #starter; #pro };
+
+  public type UserSubscription = {
+    principal : Principal;
+    tier : SubscriptionTier;
+    updatedAt : Int;
+  };
+
+  public type PlatformConfig = {
+    platformName : Text;
+    tagline : Text;
+    accentColor : Text;
+  };
+
+  ///////////////
+  // STATE
+
   let projects = Map.empty<Nat, Project>();
   let assets = Map.empty<Nat, Asset>();
   let users = Map.empty<Nat, User>();
-  let auditEntries = Map.empty<Nat, AuditEntry>();
-  let auditLogs = Map.empty<Nat, AuditLog>();
   let tasks = Map.empty<Nat, Task>();
   let collections = Map.empty<Nat, Collection>();
   let validationRules = Map.empty<Nat, ValidationRule>();
@@ -150,12 +167,13 @@ actor {
   let tokens = Map.empty<Nat, Token>();
   let fileMetadata = Map.empty<Nat, FileMetadata>();
   let userProfiles = Map.empty<Principal, UserProfile>();
+  let auditLogs = Map.empty<Nat, AuditLog>();
+  let projectMembers = Map.empty<Text, ProjectMember>();
+  let subscriptions = Map.empty<Principal, UserSubscription>();
 
   var nextProjectId = 1;
   var nextAssetId = 1;
   var nextUserId = 1;
-  var nextAuditId = 1;
-  var nextAuditLogId = 1;
   var nextTaskId = 1;
   var nextCollectionId = 1;
   var nextValidationRuleId = 1;
@@ -163,21 +181,16 @@ actor {
   var nextMergeOperationId = 1;
   var nextTokenId = 1;
   var nextFileMetadataId = 1;
-
-  type ProjectRole = { #admin; #editor; #viewer };
-
-  type ProjectMember = {
-    projectId : Nat;
-    member : Principal;
-    role : ProjectRole;
-    addedAt : Int;
-    addedBy : Principal;
-  };
-
-  let projectMembers = Map.empty<Text, ProjectMember>();
+  var nextAuditLogId = 1;
 
   let accessControlState = AccessControl.initState();
   include MixinAuthorization(accessControlState);
+
+  var stripeConfiguration : ?Stripe.StripeConfiguration = null;
+  var platformConfig : ?PlatformConfig = null;
+
+  //////////////////////
+  // HELPER FUNCTIONS
 
   func validateProjectData(name : Text, _description : Text) {
     if (name.size() == 0) {
@@ -194,19 +207,78 @@ actor {
     };
   };
 
-  func createAuditEntry(operation : Text, entityType : Text, entityId : Nat, userId : ?Nat, details : ?Text) {
-    let auditEntry : AuditEntry = {
-      id = nextAuditId;
+  func appendAuditLog(caller : Principal, action : Text, entity : Text) {
+    let logEntry : AuditLog = {
       timestamp = Time.now();
-      operation;
-      entityType;
-      entityId;
-      userId;
-      details;
+      principal = caller;
+      action;
+      entity;
     };
-    auditEntries.add(nextAuditId, auditEntry);
-    nextAuditId += 1;
+    auditLogs.add(nextAuditLogId, logEntry);
+    nextAuditLogId += 1;
   };
+
+  func makeMemberKey(projectId : Nat, principal : Principal) : Text {
+    projectId.toText() # ":" # principal.toText();
+  };
+
+  func getStripeConfiguration() : Stripe.StripeConfiguration {
+    switch (stripeConfiguration) {
+      case (null) { Runtime.trap("Stripe needs to be first configured") };
+      case (?value) { value };
+    };
+  };
+
+  func countDistinctProjectIdsForCallerInternal(caller : Principal) : Nat {
+    let allMembers = projectMembers.values().toArray();
+    let callerMembers = allMembers.filter(func(pm) { pm.member == caller });
+
+    // Count distinct project IDs
+    var distinctProjects = Map.empty<Nat, Bool>();
+    for (pm in callerMembers.vals()) {
+      distinctProjects.add(pm.projectId, true);
+    };
+
+    distinctProjects.size();
+  };
+
+  ///////////////////////
+  // AUDIT LOG QUERIES
+
+  public query ({ caller }) func getCallerRole() : async Text {
+    switch (AccessControl.getUserRole(accessControlState, caller)) {
+      case (#admin) { "admin" };
+      case (#user) { "user" };
+      case (#guest) { "guest" };
+    };
+  };
+
+  public query ({ caller }) func getAuditLogs(page : Nat, pageSize : Nat) : async {
+    entries : [AuditLog];
+    total : Nat;
+  } {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      Runtime.trap("Unauthorized: Only admins can view audit logs");
+    };
+
+    let total = auditLogs.size();
+    if (total == 0) {
+      return { entries = []; total };
+    };
+
+    let offset = page * pageSize;
+    if (offset >= total) {
+      return { entries = []; total };
+    };
+
+    let sortedLogs = auditLogs.toArray();
+    let range = sortedLogs.sliceToArray(offset, offset + pageSize : Nat);
+    let entries = range.map(func((_, log)) { log });
+    { entries; total };
+  };
+
+  ///////////////////////
+  // USER PROFILE MANAGEMENT (required by frontend)
 
   public query ({ caller }) func getCallerUserProfile() : async ?UserProfile {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
@@ -229,46 +301,8 @@ actor {
     userProfiles.add(caller, profile);
   };
 
-  public shared ({ caller }) func getAuditLogs(page : Nat, pageSize : Nat) : async {
-    entries : [AuditLog];
-    total : Nat;
-  } {
-    if (not AccessControl.isAdmin(accessControlState, caller)) {
-      Runtime.trap("Unauthorized: Only admins can access audit logs");
-    };
-    let total = auditLogs.size();
-    let skip = page * pageSize;
-    if (skip >= total or pageSize == 0) {
-      return {
-        entries = [];
-        total;
-      };
-    };
-    let entries = List.empty<AuditLog>();
-    let start = skip + 1;
-    let end = start + pageSize;
-    var count = 0;
-    for ((id, log) in auditLogs.entries()) {
-      if (id >= start and id < end) {
-        entries.add(log);
-        count += 1;
-      };
-      if (count >= pageSize) { return { entries = entries.toArray(); total } };
-    };
-    {
-      entries = entries.toArray();
-      total;
-    };
-  };
-
-  public query ({ caller }) func getCallerRole() : async Text {
-    let role = AccessControl.getUserRole(accessControlState, caller);
-    switch (role) {
-      case (#admin) { "admin" };
-      case (#user) { "user" };
-      case (#guest) { "guest" };
-    };
-  };
+  ///////////////////////
+  // Global querying (read-only, open to all)
 
   public query ({ caller }) func getProject(id : Nat) : async ?Project {
     projects.get(id);
@@ -346,9 +380,8 @@ actor {
     filtered.map(func((_, meta)) { meta });
   };
 
-  func makeMemberKey(projectId : Nat, principal : Principal) : Text {
-    projectId.toText() # ":" # principal.toText();
-  };
+  /////////////
+  // USER & PROJECT CRUD
 
   public shared ({ caller }) func registerUser(username : Text) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
@@ -366,11 +399,29 @@ actor {
     userId;
   };
 
-  public shared ({ caller }) func createProject(name : Text, description : Text) : async Nat {
+  public shared ({ caller }) func createProject(name : Text, description : Text) : async {
+    #Ok : Nat;
+    #Err : Text;
+  } {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only authenticated users can create projects");
     };
+
     validateProjectData(name, description);
+
+    let numProjects = countDistinctProjectIdsForCallerInternal(caller);
+
+    let tier = getEffectiveSubscriptionTier(caller);
+    let maxProjects = switch (tier) {
+      case (#pro) { 200 }; // Arbitrary high limit for Pro
+      case (#starter) { 20 };
+      case (#free) { 3 };
+    };
+
+    if (numProjects >= maxProjects) {
+      return #Err("Too many projects for your subscription tier");
+    };
+
     let project : Project = {
       id = nextProjectId;
       name;
@@ -378,11 +429,31 @@ actor {
       createdAt = Time.now();
       updatedAt = null;
     };
+
     projects.add(nextProjectId, project);
-    createAuditEntry("create", "project", nextProjectId, null, null);
+    appendAuditLog(caller, "createProject", "project:" # nextProjectId.toText());
+
+    // Add caller as project member (admin role)
+    let memberKey = makeMemberKey(nextProjectId, caller);
+    let projectMember : ProjectMember = {
+      projectId = nextProjectId;
+      member = caller;
+      role = #admin;
+      addedAt = Time.now();
+      addedBy = caller;
+    };
+    projectMembers.add(memberKey, projectMember);
+
     let projectId = nextProjectId;
     nextProjectId += 1;
-    projectId;
+    #Ok(projectId);
+  };
+
+  public query ({ caller }) func getProjectCountForCaller() : async Nat {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can query their project count");
+    };
+    countDistinctProjectIdsForCallerInternal(caller);
   };
 
   public shared ({ caller }) func updateProject(id : Nat, name : Text, description : Text) : async () {
@@ -401,7 +472,7 @@ actor {
           updatedAt = ?Time.now();
         };
         projects.add(id, updatedProject);
-        createAuditEntry("update", "project", id, null, null);
+        appendAuditLog(caller, "updateProject", "project:" # id.toText());
       };
     };
   };
@@ -412,11 +483,14 @@ actor {
     };
     if (projects.containsKey(id)) {
       projects.remove(id);
-      createAuditEntry("delete", "project", id, null, null);
+      appendAuditLog(caller, "deleteProject", "project:" # id.toText());
     } else {
       Runtime.trap("Project not found");
     };
   };
+
+  /////////////
+  // ASSET MGMT
 
   public shared ({ caller }) func createAsset(projectId : Nat, name : Text, description : Text) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
@@ -432,7 +506,7 @@ actor {
       updatedAt = null;
     };
     assets.add(nextAssetId, asset);
-    createAuditEntry("create", "asset", nextAssetId, null, null);
+    appendAuditLog(caller, "createAsset", "asset:" # nextAssetId.toText());
     let assetId = nextAssetId;
     nextAssetId += 1;
     assetId;
@@ -455,7 +529,7 @@ actor {
           updatedAt = ?Time.now();
         };
         assets.add(id, updatedAsset);
-        createAuditEntry("update", "asset", id, null, null);
+        appendAuditLog(caller, "updateAsset", "asset:" # id.toText());
       };
     };
   };
@@ -466,11 +540,14 @@ actor {
     };
     if (assets.containsKey(id)) {
       assets.remove(id);
-      createAuditEntry("delete", "asset", id, null, null);
+      appendAuditLog(caller, "deleteAsset", "asset:" # id.toText());
     } else {
       Runtime.trap("Asset not found");
     };
   };
+
+  //////////////
+  // TASK MGMT
 
   public shared ({ caller }) func createTask(projectId : Nat, assetId : ?Nat, name : Text, description : Text, status : Text, assignedTo : ?Principal) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
@@ -495,7 +572,7 @@ actor {
       createdBy = caller;
     };
     tasks.add(nextTaskId, newTask);
-    createAuditEntry("create", "task", nextTaskId, null, null);
+    appendAuditLog(caller, "createTask", "task:" # nextTaskId.toText());
     let taskId = nextTaskId;
     nextTaskId += 1;
     taskId;
@@ -517,7 +594,7 @@ actor {
           updatedAt = Time.now();
         };
         tasks.add(id, updatedTask);
-        createAuditEntry("update", "task", id, null, null);
+        appendAuditLog(caller, "updateTask", "task:" # id.toText());
       };
     };
   };
@@ -528,11 +605,14 @@ actor {
     };
     if (tasks.containsKey(id)) {
       tasks.remove(id);
-      createAuditEntry("delete", "task", id, null, null);
+      appendAuditLog(caller, "deleteTask", "task:" # id.toText());
     } else {
       Runtime.trap("Task not found");
     };
   };
+
+  ///////////////
+  // COLLECTIONS
 
   public shared ({ caller }) func createCollection(projectId : Nat, name : Text, description : Text, assetIds : [Nat]) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
@@ -555,7 +635,7 @@ actor {
       createdBy = caller;
     };
     collections.add(nextCollectionId, newCollection);
-    createAuditEntry("create", "collection", nextCollectionId, null, null);
+    appendAuditLog(caller, "createCollection", "collection:" # nextCollectionId.toText());
     let collectionId = nextCollectionId;
     nextCollectionId += 1;
     collectionId;
@@ -576,7 +656,7 @@ actor {
           updatedAt = Time.now();
         };
         collections.add(id, updatedCollection);
-        createAuditEntry("update", "collection", id, null, null);
+        appendAuditLog(caller, "updateCollection", "collection:" # id.toText());
       };
     };
   };
@@ -587,11 +667,14 @@ actor {
     };
     if (collections.containsKey(id)) {
       collections.remove(id);
-      createAuditEntry("delete", "collection", id, null, null);
+      appendAuditLog(caller, "deleteCollection", "collection:" # id.toText());
     } else {
       Runtime.trap("Collection not found");
     };
   };
+
+  ////////////////////////
+  // PROJECT MEMBER ROLES (admin only for mutations)
 
   public shared ({ caller }) func addProjectMember(projectId : Nat, member : Principal, role : ProjectRole) : async () {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
@@ -657,21 +740,8 @@ actor {
     };
   };
 
-  public shared ({ caller }) func selfAssignAdmin() : async () {
-    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
-      Runtime.trap("Unauthorized: must be authenticated to call selfAssignAdmin");
-    };
-    accessControlState.userRoles.add(caller, #admin);
-    let logEntry : AuditLog = {
-      timestamp = Time.now();
-      principal = caller;
-      action = "adminSelfAssign";
-      entity = caller.toText();
-    };
-    auditLogs.add(nextAuditLogId, logEntry);
-    nextAuditLogId += 1;
-  };
-
+  /////////////////////////////
+  // FILE & METADATA MGMT
   public shared ({ caller }) func storeFileMetadata(projectId : Nat, assetId : ?Nat, filename : Text, mimeType : Text, size : Nat, hash : Text) : async Nat {
     if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
       Runtime.trap("Unauthorized: Only authenticated users can store file metadata");
@@ -704,15 +774,30 @@ actor {
     };
   };
 
+  ///////////////////////////
+  // TOKEN MANAGEMENT
+
+  public shared ({ caller }) func selfAssignAdmin() : async () {
+    if (caller.isAnonymous()) {
+      Runtime.trap("Unauthorized: Must be authenticated to self-assign admin");
+    };
+    if (accessControlState.adminAssigned) {
+      Runtime.trap("Unauthorized: Admin has already been assigned");
+    };
+    accessControlState.userRoles.add(caller, #admin);
+    accessControlState.adminAssigned := true;
+    appendAuditLog(caller, "adminSelfAssign", "principal:" # caller.toText());
+  };
+
   public shared ({ caller }) func mintToken(projectId : Nat, name : Text, description : Text, metadata : Text) : async {
-    #ok : Token;
-    #err : Text;
+    #Ok : Token;
+    #Err : Text;
   } {
     if (not AccessControl.isAdmin(accessControlState, caller)) {
-      return #err("Unauthorized: Only admins can mint tokens");
+      return #Err("Unauthorized: Only admins can mint tokens");
     };
     switch (projects.get(projectId)) {
-      case (null) { return #err("Project does not exist") };
+      case (null) { return #Err("Project does not exist") };
       case (?_) {
         let newToken : Token = {
           id = nextTokenId;
@@ -724,10 +809,10 @@ actor {
           metadata;
         };
         tokens.add(nextTokenId, newToken);
-        createAuditEntry("mint", "token", nextTokenId, null, ?description);
+        appendAuditLog(caller, "mintToken", "token:" # nextTokenId.toText());
         let tokenId = nextTokenId;
         nextTokenId += 1;
-        #ok(newToken);
+        #Ok(newToken);
       };
     };
   };
@@ -739,4 +824,106 @@ actor {
   public query ({ caller }) func listTokensByProject(projectId : Nat) : async [Token] {
     tokens.values().toArray().filter(func(token) { token.projectId == projectId });
   };
-}
+
+  /////////////////////
+  // SUBSCRIPTION MANAGEMENT
+
+  func getEffectiveSubscriptionTier(principal : Principal) : SubscriptionTier {
+    switch (subscriptions.get(principal)) {
+      case (?sub) { sub.tier };
+      case (null) { #free };
+    };
+  };
+
+  public query ({ caller }) func getMySubscription() : async ?UserSubscription {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can view their subscription");
+    };
+    subscriptions.get(caller);
+  };
+
+  public shared ({ caller }) func upgradeSubscription(tier : SubscriptionTier) : async {
+    #Ok : ();
+    #Err : Text;
+  } {
+    if (not AccessControl.hasPermission(accessControlState, caller, #user)) {
+      Runtime.trap("Unauthorized: Only users can upgrade subscriptions");
+    };
+    let newSubscription : UserSubscription = {
+      principal = caller;
+      tier;
+      updatedAt = Time.now();
+    };
+    subscriptions.add(caller, newSubscription);
+    appendAuditLog(caller, "upgradeSubscription", "principal:" # caller.toText());
+    #Ok(());
+  };
+
+  /////////////////////
+  // PLATFORM BRANDING CONFIG
+
+  public query func getPlatformConfig() : async ?PlatformConfig {
+    platformConfig;
+  };
+
+  public shared ({ caller }) func setPlatformConfig(config : PlatformConfig) : async {
+    #Ok : ();
+    #Err : Text;
+  } {
+    if (not AccessControl.isAdmin(accessControlState, caller)) {
+      return #Err("Unauthorized: Only admins can update platform configuration");
+    };
+    platformConfig := ?config;
+    appendAuditLog(caller, "SET_PLATFORM_CONFIG", "platformConfig");
+    #Ok(());
+  };
+
+  ////////////////////////
+  // STRIPE INTEGRATION
+
+  public shared ({ caller }) func setStripeConfiguration(config : Stripe.StripeConfiguration) : async () {
+    if (not AccessControl.hasPermission(accessControlState, caller, #admin)) {
+      Runtime.trap("Unauthorized: Only admins can perform this action");
+    };
+    stripeConfiguration := ?config;
+  };
+
+  public query ({ caller }) func isStripeConfigured() : async Bool {
+    stripeConfiguration != null;
+  };
+
+  public query func transform(input : OutCall.TransformationInput) : async OutCall.TransformationOutput {
+    OutCall.transform(input);
+  };
+
+  public shared ({ caller }) func createCheckoutSession(items : [Stripe.ShoppingItem], successUrl : Text, cancelUrl : Text) : async Text {
+    await Stripe.createCheckoutSession(
+      getStripeConfiguration(),
+      caller,
+      items,
+      successUrl,
+      cancelUrl,
+      transform,
+    );
+  };
+
+  public shared ({ caller }) func getStripeSessionStatus(sessionId : Text) : async Stripe.StripeSessionStatus {
+    await Stripe.getSessionStatus(getStripeConfiguration(), sessionId, transform);
+  };
+
+  public shared ({ caller }) func handleStripePaymentCompleted(tier : SubscriptionTier, user : Principal) : async {
+    #Ok : ();
+    #Err : Text;
+  } {
+    if (not (AccessControl.isAdmin(accessControlState, caller))) {
+      Runtime.trap("Unauthorized: Only admins can post payment status updates");
+    };
+    let newSubscription : UserSubscription = {
+      principal = user;
+      tier;
+      updatedAt = Time.now();
+    };
+    subscriptions.add(user, newSubscription);
+    #Ok(());
+  };
+};

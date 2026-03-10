@@ -91,7 +91,10 @@ export default function FileMetadataPage() {
       )
     ) {
       try {
-        await deleteFileMetadata.mutateAsync(id);
+        await deleteFileMetadata.mutateAsync({
+          id,
+          projectId: BigInt(projectId),
+        });
         toast.success("File metadata deleted successfully");
       } catch (error: any) {
         toast.error(error?.message || "Failed to delete file metadata");

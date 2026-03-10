@@ -18,6 +18,13 @@ export const UserRole = IDL.Variant({
   'user' : IDL.Null,
   'guest' : IDL.Null,
 });
+export const ShoppingItem = IDL.Record({
+  'productName' : IDL.Text,
+  'currency' : IDL.Text,
+  'quantity' : IDL.Nat,
+  'priceInCents' : IDL.Nat,
+  'productDescription' : IDL.Text,
+});
 export const Time = IDL.Int;
 export const Asset = IDL.Record({
   'id' : IDL.Nat,
@@ -68,6 +75,21 @@ export const MergeOperation = IDL.Record({
   'targetAssetId' : IDL.Nat,
   'projectId' : IDL.Nat,
 });
+export const SubscriptionTier = IDL.Variant({
+  'pro' : IDL.Null,
+  'starter' : IDL.Null,
+  'free' : IDL.Null,
+});
+export const UserSubscription = IDL.Record({
+  'principal' : IDL.Principal,
+  'tier' : SubscriptionTier,
+  'updatedAt' : IDL.Int,
+});
+export const PlatformConfig = IDL.Record({
+  'tagline' : IDL.Text,
+  'accentColor' : IDL.Text,
+  'platformName' : IDL.Text,
+});
 export const Project = IDL.Record({
   'id' : IDL.Nat,
   'name' : IDL.Text,
@@ -81,6 +103,13 @@ export const ProjectMember = IDL.Record({
   'addedAt' : IDL.Int,
   'addedBy' : IDL.Principal,
   'projectId' : IDL.Nat,
+});
+export const StripeSessionStatus = IDL.Variant({
+  'completed' : IDL.Record({
+    'userPrincipal' : IDL.Opt(IDL.Text),
+    'response' : IDL.Text,
+  }),
+  'failed' : IDL.Record({ 'error' : IDL.Text }),
 });
 export const Task = IDL.Record({
   'id' : IDL.Nat,
@@ -122,18 +151,49 @@ export const ValidationRule = IDL.Record({
   'projectId' : IDL.Nat,
   'conditions' : IDL.Text,
 });
+export const StripeConfiguration = IDL.Record({
+  'allowedCountries' : IDL.Vec(IDL.Text),
+  'secretKey' : IDL.Text,
+});
+export const http_header = IDL.Record({
+  'value' : IDL.Text,
+  'name' : IDL.Text,
+});
+export const http_request_result = IDL.Record({
+  'status' : IDL.Nat,
+  'body' : IDL.Vec(IDL.Nat8),
+  'headers' : IDL.Vec(http_header),
+});
+export const TransformationInput = IDL.Record({
+  'context' : IDL.Vec(IDL.Nat8),
+  'response' : http_request_result,
+});
+export const TransformationOutput = IDL.Record({
+  'status' : IDL.Nat,
+  'body' : IDL.Vec(IDL.Nat8),
+  'headers' : IDL.Vec(http_header),
+});
 
 export const idlService = IDL.Service({
   '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
   'addProjectMember' : IDL.Func([IDL.Nat, IDL.Principal, ProjectRole], [], []),
   'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
   'createAsset' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [IDL.Nat], []),
+  'createCheckoutSession' : IDL.Func(
+      [IDL.Vec(ShoppingItem), IDL.Text, IDL.Text],
+      [IDL.Text],
+      [],
+    ),
   'createCollection' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text, IDL.Vec(IDL.Nat)],
       [IDL.Nat],
       [],
     ),
-  'createProject' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
+  'createProject' : IDL.Func(
+      [IDL.Text, IDL.Text],
+      [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+      [],
+    ),
   'createTask' : IDL.Func(
       [
         IDL.Nat,
@@ -155,7 +215,7 @@ export const idlService = IDL.Service({
   'getAuditLogs' : IDL.Func(
       [IDL.Nat, IDL.Nat],
       [IDL.Record({ 'total' : IDL.Nat, 'entries' : IDL.Vec(AuditLog) })],
-      [],
+      ['query'],
     ),
   'getCallerRole' : IDL.Func([], [IDL.Text], ['query']),
   'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
@@ -167,12 +227,16 @@ export const idlService = IDL.Service({
       [IDL.Opt(MergeOperation)],
       ['query'],
     ),
+  'getMySubscription' : IDL.Func([], [IDL.Opt(UserSubscription)], ['query']),
+  'getPlatformConfig' : IDL.Func([], [IDL.Opt(PlatformConfig)], ['query']),
   'getProject' : IDL.Func([IDL.Nat], [IDL.Opt(Project)], ['query']),
+  'getProjectCountForCaller' : IDL.Func([], [IDL.Nat], ['query']),
   'getProjectMember' : IDL.Func(
       [IDL.Nat, IDL.Principal],
       [IDL.Opt(ProjectMember)],
       ['query'],
     ),
+  'getStripeSessionStatus' : IDL.Func([IDL.Text], [StripeSessionStatus], []),
   'getTask' : IDL.Func([IDL.Nat], [IDL.Opt(Task)], ['query']),
   'getToken' : IDL.Func([IDL.Nat], [IDL.Opt(Token)], ['query']),
   'getTransitionRule' : IDL.Func(
@@ -190,7 +254,13 @@ export const idlService = IDL.Service({
       [IDL.Opt(ValidationRule)],
       ['query'],
     ),
+  'handleStripePaymentCompleted' : IDL.Func(
+      [SubscriptionTier, IDL.Principal],
+      [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+      [],
+    ),
   'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+  'isStripeConfigured' : IDL.Func([], [IDL.Bool], ['query']),
   'listAssets' : IDL.Func([], [IDL.Vec(Asset)], ['query']),
   'listAssetsByProject' : IDL.Func([IDL.Nat], [IDL.Vec(Asset)], ['query']),
   'listCollectionsByProject' : IDL.Func(
@@ -228,17 +298,28 @@ export const idlService = IDL.Service({
     ),
   'mintToken' : IDL.Func(
       [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
-      [IDL.Variant({ 'ok' : Token, 'err' : IDL.Text })],
+      [IDL.Variant({ 'Ok' : Token, 'Err' : IDL.Text })],
       [],
     ),
   'registerUser' : IDL.Func([IDL.Text], [IDL.Nat], []),
   'removeProjectMember' : IDL.Func([IDL.Nat, IDL.Principal], [], []),
   'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
   'selfAssignAdmin' : IDL.Func([], [], []),
+  'setPlatformConfig' : IDL.Func(
+      [PlatformConfig],
+      [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+      [],
+    ),
+  'setStripeConfiguration' : IDL.Func([StripeConfiguration], [], []),
   'storeFileMetadata' : IDL.Func(
       [IDL.Nat, IDL.Opt(IDL.Nat), IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
       [IDL.Nat],
       [],
+    ),
+  'transform' : IDL.Func(
+      [TransformationInput],
+      [TransformationOutput],
+      ['query'],
     ),
   'updateAsset' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
   'updateCollection' : IDL.Func(
@@ -257,6 +338,11 @@ export const idlService = IDL.Service({
       [],
       [],
     ),
+  'upgradeSubscription' : IDL.Func(
+      [SubscriptionTier],
+      [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+      [],
+    ),
 });
 
 export const idlInitArgs = [];
@@ -271,6 +357,13 @@ export const idlFactory = ({ IDL }) => {
     'admin' : IDL.Null,
     'user' : IDL.Null,
     'guest' : IDL.Null,
+  });
+  const ShoppingItem = IDL.Record({
+    'productName' : IDL.Text,
+    'currency' : IDL.Text,
+    'quantity' : IDL.Nat,
+    'priceInCents' : IDL.Nat,
+    'productDescription' : IDL.Text,
   });
   const Time = IDL.Int;
   const Asset = IDL.Record({
@@ -319,6 +412,21 @@ export const idlFactory = ({ IDL }) => {
     'targetAssetId' : IDL.Nat,
     'projectId' : IDL.Nat,
   });
+  const SubscriptionTier = IDL.Variant({
+    'pro' : IDL.Null,
+    'starter' : IDL.Null,
+    'free' : IDL.Null,
+  });
+  const UserSubscription = IDL.Record({
+    'principal' : IDL.Principal,
+    'tier' : SubscriptionTier,
+    'updatedAt' : IDL.Int,
+  });
+  const PlatformConfig = IDL.Record({
+    'tagline' : IDL.Text,
+    'accentColor' : IDL.Text,
+    'platformName' : IDL.Text,
+  });
   const Project = IDL.Record({
     'id' : IDL.Nat,
     'name' : IDL.Text,
@@ -332,6 +440,13 @@ export const idlFactory = ({ IDL }) => {
     'addedAt' : IDL.Int,
     'addedBy' : IDL.Principal,
     'projectId' : IDL.Nat,
+  });
+  const StripeSessionStatus = IDL.Variant({
+    'completed' : IDL.Record({
+      'userPrincipal' : IDL.Opt(IDL.Text),
+      'response' : IDL.Text,
+    }),
+    'failed' : IDL.Record({ 'error' : IDL.Text }),
   });
   const Task = IDL.Record({
     'id' : IDL.Nat,
@@ -373,6 +488,25 @@ export const idlFactory = ({ IDL }) => {
     'projectId' : IDL.Nat,
     'conditions' : IDL.Text,
   });
+  const StripeConfiguration = IDL.Record({
+    'allowedCountries' : IDL.Vec(IDL.Text),
+    'secretKey' : IDL.Text,
+  });
+  const http_header = IDL.Record({ 'value' : IDL.Text, 'name' : IDL.Text });
+  const http_request_result = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(http_header),
+  });
+  const TransformationInput = IDL.Record({
+    'context' : IDL.Vec(IDL.Nat8),
+    'response' : http_request_result,
+  });
+  const TransformationOutput = IDL.Record({
+    'status' : IDL.Nat,
+    'body' : IDL.Vec(IDL.Nat8),
+    'headers' : IDL.Vec(http_header),
+  });
   
   return IDL.Service({
     '_initializeAccessControlWithSecret' : IDL.Func([IDL.Text], [], []),
@@ -383,12 +517,21 @@ export const idlFactory = ({ IDL }) => {
       ),
     'assignCallerUserRole' : IDL.Func([IDL.Principal, UserRole], [], []),
     'createAsset' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [IDL.Nat], []),
+    'createCheckoutSession' : IDL.Func(
+        [IDL.Vec(ShoppingItem), IDL.Text, IDL.Text],
+        [IDL.Text],
+        [],
+      ),
     'createCollection' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text, IDL.Vec(IDL.Nat)],
         [IDL.Nat],
         [],
       ),
-    'createProject' : IDL.Func([IDL.Text, IDL.Text], [IDL.Nat], []),
+    'createProject' : IDL.Func(
+        [IDL.Text, IDL.Text],
+        [IDL.Variant({ 'Ok' : IDL.Nat, 'Err' : IDL.Text })],
+        [],
+      ),
     'createTask' : IDL.Func(
         [
           IDL.Nat,
@@ -410,7 +553,7 @@ export const idlFactory = ({ IDL }) => {
     'getAuditLogs' : IDL.Func(
         [IDL.Nat, IDL.Nat],
         [IDL.Record({ 'total' : IDL.Nat, 'entries' : IDL.Vec(AuditLog) })],
-        [],
+        ['query'],
       ),
     'getCallerRole' : IDL.Func([], [IDL.Text], ['query']),
     'getCallerUserProfile' : IDL.Func([], [IDL.Opt(UserProfile)], ['query']),
@@ -422,12 +565,16 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(MergeOperation)],
         ['query'],
       ),
+    'getMySubscription' : IDL.Func([], [IDL.Opt(UserSubscription)], ['query']),
+    'getPlatformConfig' : IDL.Func([], [IDL.Opt(PlatformConfig)], ['query']),
     'getProject' : IDL.Func([IDL.Nat], [IDL.Opt(Project)], ['query']),
+    'getProjectCountForCaller' : IDL.Func([], [IDL.Nat], ['query']),
     'getProjectMember' : IDL.Func(
         [IDL.Nat, IDL.Principal],
         [IDL.Opt(ProjectMember)],
         ['query'],
       ),
+    'getStripeSessionStatus' : IDL.Func([IDL.Text], [StripeSessionStatus], []),
     'getTask' : IDL.Func([IDL.Nat], [IDL.Opt(Task)], ['query']),
     'getToken' : IDL.Func([IDL.Nat], [IDL.Opt(Token)], ['query']),
     'getTransitionRule' : IDL.Func(
@@ -445,7 +592,13 @@ export const idlFactory = ({ IDL }) => {
         [IDL.Opt(ValidationRule)],
         ['query'],
       ),
+    'handleStripePaymentCompleted' : IDL.Func(
+        [SubscriptionTier, IDL.Principal],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
     'isCallerAdmin' : IDL.Func([], [IDL.Bool], ['query']),
+    'isStripeConfigured' : IDL.Func([], [IDL.Bool], ['query']),
     'listAssets' : IDL.Func([], [IDL.Vec(Asset)], ['query']),
     'listAssetsByProject' : IDL.Func([IDL.Nat], [IDL.Vec(Asset)], ['query']),
     'listCollectionsByProject' : IDL.Func(
@@ -483,17 +636,28 @@ export const idlFactory = ({ IDL }) => {
       ),
     'mintToken' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text, IDL.Text],
-        [IDL.Variant({ 'ok' : Token, 'err' : IDL.Text })],
+        [IDL.Variant({ 'Ok' : Token, 'Err' : IDL.Text })],
         [],
       ),
     'registerUser' : IDL.Func([IDL.Text], [IDL.Nat], []),
     'removeProjectMember' : IDL.Func([IDL.Nat, IDL.Principal], [], []),
     'saveCallerUserProfile' : IDL.Func([UserProfile], [], []),
     'selfAssignAdmin' : IDL.Func([], [], []),
+    'setPlatformConfig' : IDL.Func(
+        [PlatformConfig],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
+        [],
+      ),
+    'setStripeConfiguration' : IDL.Func([StripeConfiguration], [], []),
     'storeFileMetadata' : IDL.Func(
         [IDL.Nat, IDL.Opt(IDL.Nat), IDL.Text, IDL.Text, IDL.Nat, IDL.Text],
         [IDL.Nat],
         [],
+      ),
+    'transform' : IDL.Func(
+        [TransformationInput],
+        [TransformationOutput],
+        ['query'],
       ),
     'updateAsset' : IDL.Func([IDL.Nat, IDL.Text, IDL.Text], [], []),
     'updateCollection' : IDL.Func(
@@ -510,6 +674,11 @@ export const idlFactory = ({ IDL }) => {
     'updateTask' : IDL.Func(
         [IDL.Nat, IDL.Text, IDL.Text, IDL.Text, IDL.Opt(IDL.Principal)],
         [],
+        [],
+      ),
+    'upgradeSubscription' : IDL.Func(
+        [SubscriptionTier],
+        [IDL.Variant({ 'Ok' : IDL.Null, 'Err' : IDL.Text })],
         [],
       ),
   });

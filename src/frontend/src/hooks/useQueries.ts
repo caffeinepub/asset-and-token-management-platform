@@ -3,13 +3,19 @@ import {
   type AuditLog,
   type Collection,
   type FileMetadata,
+  type PlatformConfig,
   type Project,
+  type ShoppingItem,
+  type StripeConfiguration,
+  type SubscriptionTier,
   type Task,
   type Token,
   UserRole,
+  type UserSubscription,
 } from "@/backend";
 import { Principal } from "@dfinity/principal";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useActor } from "./useActor";
 
 // Role
@@ -21,34 +27,6 @@ export function useMyRole() {
     queryFn: async () => {
       if (!actor) return UserRole.guest;
       return actor.getCallerUserRole();
-    },
-    enabled: !!actor && !isFetching,
-  });
-}
-
-// Caller role (text-based, used for audit log access control)
-export function useGetCallerRole() {
-  const { actor, isFetching } = useActor();
-
-  return useQuery<string>({
-    queryKey: ["callerRole"],
-    queryFn: async () => {
-      if (!actor) return "guest";
-      return actor.getCallerRole();
-    },
-    enabled: !!actor && !isFetching,
-  });
-}
-
-// Audit Logs (paginated)
-export function useGetAuditLogs(page: number, pageSize: number) {
-  const { actor, isFetching } = useActor();
-
-  return useQuery<{ entries: AuditLog[]; total: bigint }>({
-    queryKey: ["auditLogs", page, pageSize],
-    queryFn: async () => {
-      if (!actor) return { entries: [], total: 0n };
-      return actor.getAuditLogs(BigInt(page), BigInt(pageSize));
     },
     enabled: !!actor && !isFetching,
   });
@@ -91,10 +69,15 @@ export function useCreateProject() {
       description,
     }: { name: string; description: string }) => {
       if (!actor) throw new Error("Actor not initialized");
-      return actor.createProject(name, description);
+      const result = await actor.createProject(name, description);
+      if (result.__kind__ === "Err") {
+        throw new Error(result.Err);
+      }
+      return result.Ok;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["projectCount"] });
     },
   });
 }
@@ -480,10 +463,10 @@ export function useMintToken() {
         description,
         metadata,
       );
-      if (result.__kind__ === "err") {
-        throw new Error(result.err);
+      if (result.__kind__ === "Err") {
+        throw new Error(result.Err);
       }
-      return result.ok;
+      return result.Ok;
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({
@@ -558,12 +541,145 @@ export function useDeleteFileMetadata() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: bigint) => {
+    mutationFn: async ({
+      id,
+      projectId: _projectId,
+    }: { id: bigint; projectId: bigint }) => {
       if (!actor) throw new Error("Actor not initialized");
       return actor.deleteFileMetadata(id);
     },
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({
+        queryKey: ["fileMetadata", "project", variables.projectId.toString()],
+      });
       queryClient.invalidateQueries({ queryKey: ["fileMetadata"] });
+    },
+  });
+}
+
+// Subscription
+export function useMySubscription() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<UserSubscription | null>({
+    queryKey: ["mySubscription"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getMySubscription();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useProjectCountForCaller() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<bigint>({
+    queryKey: ["projectCount"],
+    queryFn: async () => {
+      if (!actor) return 0n;
+      return actor.getProjectCountForCaller();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useUpgradeSubscription() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (tier: SubscriptionTier) => {
+      if (!actor) throw new Error("Actor not initialized");
+      const result = await actor.upgradeSubscription(tier);
+      if (result.__kind__ === "Err") {
+        throw new Error(result.Err);
+      }
+      return result.Ok;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["mySubscription"] });
+      queryClient.invalidateQueries({ queryKey: ["projectCount"] });
+    },
+  });
+}
+
+export function useIsStripeConfigured() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<boolean>({
+    queryKey: ["stripeConfigured"],
+    queryFn: async () => {
+      if (!actor) return false;
+      return actor.isStripeConfigured();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useSetStripeConfiguration() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (config: StripeConfiguration) => {
+      if (!actor) throw new Error("Actor not initialized");
+      return actor.setStripeConfiguration(config);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["stripeConfigured"] });
+      toast.success("Stripe configuration saved");
+    },
+    onError: (error: unknown) => {
+      const msg =
+        error instanceof Error ? error.message : "Failed to save Stripe config";
+      toast.error(msg);
+    },
+  });
+}
+
+export function useCreateCheckoutSession() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async ({
+      items,
+      successUrl,
+      cancelUrl,
+    }: {
+      items: ShoppingItem[];
+      successUrl: string;
+      cancelUrl: string;
+    }) => {
+      if (!actor) throw new Error("Actor not initialized");
+      const raw = await actor.createCheckoutSession(
+        items,
+        successUrl,
+        cancelUrl,
+      );
+      const session = JSON.parse(raw) as { id: string; url: string };
+      if (!session?.url) throw new Error("Invalid checkout session response");
+      return session;
+    },
+  });
+}
+
+export function useGetStripeSessionStatus(sessionId: string) {
+  const { actor, isFetching } = useActor();
+
+  return useQuery({
+    queryKey: ["stripeSessionStatus", sessionId],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getStripeSessionStatus(sessionId);
+    },
+    enabled: !!actor && !isFetching && !!sessionId,
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 2000;
+      if (data.__kind__ === "completed" || data.__kind__ === "failed")
+        return false;
+      return 2000;
     },
   });
 }
@@ -579,13 +695,90 @@ export function useSelfAssignAdmin() {
       return actor.selfAssignAdmin();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      queryClient.invalidateQueries({ queryKey: ["assets"] });
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      queryClient.invalidateQueries({ queryKey: ["collections"] });
-      queryClient.invalidateQueries({ queryKey: ["projectMembers"] });
       queryClient.invalidateQueries({ queryKey: ["myRole"] });
       queryClient.invalidateQueries({ queryKey: ["callerRole"] });
+      toast.success("Admin role assigned successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error?.message || "Failed to assign admin role");
+    },
+  });
+}
+
+// Audit Logs
+export function useCallerRole() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<string>({
+    queryKey: ["callerRole"],
+    queryFn: async () => {
+      if (!actor) return "guest";
+      return actor.getCallerRole();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useAuditLogs(page: number, pageSize: bigint) {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<{ entries: AuditLog[]; total: bigint }>({
+    queryKey: ["auditLogs", page],
+    queryFn: async () => {
+      if (!actor) return { entries: [], total: 0n };
+      return actor.getAuditLogs(BigInt(page), pageSize);
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+// Platform Config
+export type { PlatformConfig };
+
+export function usePlatformConfig() {
+  const { actor, isFetching } = useActor();
+
+  const query = useQuery<PlatformConfig | null>({
+    queryKey: ["platformConfig"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getPlatformConfig();
+    },
+    enabled: !!actor && !isFetching,
+  });
+
+  const config = query.data;
+  return {
+    platformName: config?.platformName ?? "Platform",
+    tagline: config?.tagline ?? "",
+    accentColor: config?.accentColor ?? "#6366f1",
+    isLoading: query.isLoading,
+    error: query.error,
+    raw: config,
+  };
+}
+
+export function useSetPlatformConfig() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (config: PlatformConfig) => {
+      if (!actor) throw new Error("Actor not initialized");
+      const result = await actor.setPlatformConfig(config);
+      if (result && result.__kind__ === "Err") {
+        throw new Error(result.Err);
+      }
+      return result;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["platformConfig"] });
+      toast.success("Branding saved");
+    },
+    onError: (error: unknown) => {
+      const msg =
+        error instanceof Error ? error.message : "Failed to save branding";
+      toast.error(msg);
     },
   });
 }

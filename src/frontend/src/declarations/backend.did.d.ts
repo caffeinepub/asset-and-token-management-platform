@@ -55,6 +55,11 @@ export interface MergeOperation {
   'targetAssetId' : bigint,
   'projectId' : bigint,
 }
+export interface PlatformConfig {
+  'tagline' : string,
+  'accentColor' : string,
+  'platformName' : string,
+}
 export interface Project {
   'id' : bigint,
   'name' : string,
@@ -72,6 +77,24 @@ export interface ProjectMember {
 export type ProjectRole = { 'admin' : null } |
   { 'editor' : null } |
   { 'viewer' : null };
+export interface ShoppingItem {
+  'productName' : string,
+  'currency' : string,
+  'quantity' : bigint,
+  'priceInCents' : bigint,
+  'productDescription' : string,
+}
+export interface StripeConfiguration {
+  'allowedCountries' : Array<string>,
+  'secretKey' : string,
+}
+export type StripeSessionStatus = {
+    'completed' : { 'userPrincipal' : [] | [string], 'response' : string }
+  } |
+  { 'failed' : { 'error' : string } };
+export type SubscriptionTier = { 'pro' : null } |
+  { 'starter' : null } |
+  { 'free' : null };
 export interface Task {
   'id' : bigint,
   'status' : string,
@@ -94,6 +117,15 @@ export interface Token {
   'mintedBy' : Principal,
   'projectId' : bigint,
 }
+export interface TransformationInput {
+  'context' : Uint8Array,
+  'response' : http_request_result,
+}
+export interface TransformationOutput {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
+}
 export interface TransitionRule {
   'id' : bigint,
   'toStatus' : string,
@@ -108,6 +140,11 @@ export interface UserProfile { 'username' : string, 'name' : string }
 export type UserRole = { 'admin' : null } |
   { 'user' : null } |
   { 'guest' : null };
+export interface UserSubscription {
+  'principal' : Principal,
+  'tier' : SubscriptionTier,
+  'updatedAt' : bigint,
+}
 export interface ValidationRule {
   'id' : bigint,
   'ruleType' : string,
@@ -117,16 +154,30 @@ export interface ValidationRule {
   'projectId' : bigint,
   'conditions' : string,
 }
+export interface http_header { 'value' : string, 'name' : string }
+export interface http_request_result {
+  'status' : bigint,
+  'body' : Uint8Array,
+  'headers' : Array<http_header>,
+}
 export interface _SERVICE {
   '_initializeAccessControlWithSecret' : ActorMethod<[string], undefined>,
   'addProjectMember' : ActorMethod<[bigint, Principal, ProjectRole], undefined>,
   'assignCallerUserRole' : ActorMethod<[Principal, UserRole], undefined>,
   'createAsset' : ActorMethod<[bigint, string, string], bigint>,
+  'createCheckoutSession' : ActorMethod<
+    [Array<ShoppingItem>, string, string],
+    string
+  >,
   'createCollection' : ActorMethod<
     [bigint, string, string, Array<bigint>],
     bigint
   >,
-  'createProject' : ActorMethod<[string, string], bigint>,
+  'createProject' : ActorMethod<
+    [string, string],
+    { 'Ok' : bigint } |
+      { 'Err' : string }
+  >,
   'createTask' : ActorMethod<
     [bigint, [] | [bigint], string, string, string, [] | [Principal]],
     bigint
@@ -147,14 +198,24 @@ export interface _SERVICE {
   'getCollection' : ActorMethod<[bigint], [] | [Collection]>,
   'getFileMetadata' : ActorMethod<[bigint], [] | [FileMetadata]>,
   'getMergeOperation' : ActorMethod<[bigint], [] | [MergeOperation]>,
+  'getMySubscription' : ActorMethod<[], [] | [UserSubscription]>,
+  'getPlatformConfig' : ActorMethod<[], [] | [PlatformConfig]>,
   'getProject' : ActorMethod<[bigint], [] | [Project]>,
+  'getProjectCountForCaller' : ActorMethod<[], bigint>,
   'getProjectMember' : ActorMethod<[bigint, Principal], [] | [ProjectMember]>,
+  'getStripeSessionStatus' : ActorMethod<[string], StripeSessionStatus>,
   'getTask' : ActorMethod<[bigint], [] | [Task]>,
   'getToken' : ActorMethod<[bigint], [] | [Token]>,
   'getTransitionRule' : ActorMethod<[bigint], [] | [TransitionRule]>,
   'getUserProfile' : ActorMethod<[Principal], [] | [UserProfile]>,
   'getValidationRule' : ActorMethod<[bigint], [] | [ValidationRule]>,
+  'handleStripePaymentCompleted' : ActorMethod<
+    [SubscriptionTier, Principal],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
   'isCallerAdmin' : ActorMethod<[], boolean>,
+  'isStripeConfigured' : ActorMethod<[], boolean>,
   'listAssets' : ActorMethod<[], Array<Asset>>,
   'listAssetsByProject' : ActorMethod<[bigint], Array<Asset>>,
   'listCollectionsByProject' : ActorMethod<[bigint], Array<Collection>>,
@@ -168,17 +229,24 @@ export interface _SERVICE {
   'listValidationRulesByProject' : ActorMethod<[bigint], Array<ValidationRule>>,
   'mintToken' : ActorMethod<
     [bigint, string, string, string],
-    { 'ok' : Token } |
-      { 'err' : string }
+    { 'Ok' : Token } |
+      { 'Err' : string }
   >,
   'registerUser' : ActorMethod<[string], bigint>,
   'removeProjectMember' : ActorMethod<[bigint, Principal], undefined>,
   'saveCallerUserProfile' : ActorMethod<[UserProfile], undefined>,
   'selfAssignAdmin' : ActorMethod<[], undefined>,
+  'setPlatformConfig' : ActorMethod<
+    [PlatformConfig],
+    { 'Ok' : null } |
+      { 'Err' : string }
+  >,
+  'setStripeConfiguration' : ActorMethod<[StripeConfiguration], undefined>,
   'storeFileMetadata' : ActorMethod<
     [bigint, [] | [bigint], string, string, bigint, string],
     bigint
   >,
+  'transform' : ActorMethod<[TransformationInput], TransformationOutput>,
   'updateAsset' : ActorMethod<[bigint, string, string], undefined>,
   'updateCollection' : ActorMethod<
     [bigint, string, string, Array<bigint>],
@@ -192,6 +260,11 @@ export interface _SERVICE {
   'updateTask' : ActorMethod<
     [bigint, string, string, string, [] | [Principal]],
     undefined
+  >,
+  'upgradeSubscription' : ActorMethod<
+    [SubscriptionTier],
+    { 'Ok' : null } |
+      { 'Err' : string }
   >,
 }
 export declare const idlService: IDL.ServiceClass;
