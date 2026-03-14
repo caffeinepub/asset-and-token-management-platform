@@ -3,8 +3,10 @@ import {
   type AuditLog,
   type Collection,
   type FileMetadata,
+  type OnboardingState,
   type PlatformConfig,
   type Project,
+  type ProjectRole,
   type ShoppingItem,
   type StripeConfiguration,
   type SubscriptionTier,
@@ -779,6 +781,96 @@ export function useSetPlatformConfig() {
       const msg =
         error instanceof Error ? error.message : "Failed to save branding";
       toast.error(msg);
+    },
+  });
+}
+
+// Onboarding
+export function useMyOnboardingState() {
+  const { actor, isFetching } = useActor();
+
+  return useQuery<OnboardingState | null>({
+    queryKey: ["myOnboardingState"],
+    queryFn: async () => {
+      if (!actor) return null;
+      return actor.getMyOnboardingState();
+    },
+    enabled: !!actor && !isFetching,
+  });
+}
+
+export function useUpdateOnboardingStep() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (step: bigint) => {
+      if (!actor) throw new Error("Actor not initialized");
+      const result = await actor.updateOnboardingStep(step);
+      if (result.__kind__ === "Err") {
+        throw new Error(result.Err);
+      }
+      return result.Ok;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myOnboardingState"] });
+    },
+  });
+}
+
+export function useCompleteOnboarding() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Actor not initialized");
+      const result = await actor.completeOnboarding();
+      if (result.__kind__ === "Err") {
+        throw new Error(result.Err);
+      }
+      return result.Ok;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myOnboardingState"] });
+    },
+  });
+}
+
+export function useSkipOnboarding() {
+  const { actor } = useActor();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      if (!actor) throw new Error("Actor not initialized");
+      const result = await actor.skipOnboarding();
+      if (result.__kind__ === "Err") {
+        throw new Error(result.Err);
+      }
+      return result.Ok;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["myOnboardingState"] });
+    },
+  });
+}
+
+export function useAddProjectMember() {
+  const { actor } = useActor();
+
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      member,
+      role,
+    }: {
+      projectId: bigint;
+      member: Principal;
+      role: ProjectRole;
+    }) => {
+      if (!actor) throw new Error("Actor not initialized");
+      return actor.addProjectMember(projectId, member, role);
     },
   });
 }

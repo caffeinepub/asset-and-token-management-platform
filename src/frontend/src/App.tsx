@@ -1,7 +1,9 @@
 import Footer from "@/components/Footer";
 import Header from "@/components/Header";
+import OnboardingWizard from "@/components/OnboardingWizard";
 import { Toaster } from "@/components/ui/sonner";
 import { useInternetIdentity } from "@/hooks/useInternetIdentity";
+import { useMyOnboardingState } from "@/hooks/useQueries";
 import AssetsPage from "@/pages/AssetsPage";
 import AuditLogPage from "@/pages/AuditLogPage";
 import CollectionsPage from "@/pages/CollectionsPage";
@@ -38,6 +40,41 @@ function Layout() {
   );
 }
 
+function OnboardingGate() {
+  const { data: onboardingState, isLoading } = useMyOnboardingState();
+
+  // Wait until we have a confirmed response from the backend before deciding
+  // whether to show the wizard. When the actor is not yet ready, the query is
+  // disabled and returns `undefined` -- treating that as "show" caused the
+  // wizard to flash briefly and then vanish once the real fetch started.
+  if (isLoading || onboardingState === undefined) return null;
+
+  const shouldShow =
+    onboardingState === null ||
+    (onboardingState.completedAt.length === 0 &&
+      onboardingState.skippedAt.length === 0);
+
+  if (!shouldShow) return null;
+
+  const hasCompleted =
+    onboardingState !== null && onboardingState.completedAt.length > 0;
+
+  const initialStep =
+    onboardingState !== null
+      ? Math.min(Number(onboardingState.lastStepReached) + 1, 3)
+      : 1;
+
+  return (
+    <OnboardingWizard
+      initialStep={initialStep}
+      hasCompleted={hasCompleted}
+      onClose={() => {
+        queryClient.invalidateQueries({ queryKey: ["myOnboardingState"] });
+      }}
+    />
+  );
+}
+
 /** Guards the root "/" route — redirects unauthenticated visitors to "/landing" */
 function ProtectedIndex() {
   const { identity, isInitializing } = useInternetIdentity();
@@ -50,7 +87,13 @@ function ProtectedIndex() {
   }, [isInitializing, identity, navigate]);
 
   if (isInitializing || !identity) return null;
-  return <ProjectsPage />;
+
+  return (
+    <>
+      <ProjectsPage />
+      <OnboardingGate />
+    </>
+  );
 }
 
 const rootRoute = createRootRoute({

@@ -1,5 +1,6 @@
 import { SubscriptionTier } from "@/backend";
 import { Button } from "@/components/ui/button";
+import { useActor } from "@/hooks/useActor";
 import {
   useGetStripeSessionStatus,
   useUpgradeSubscription,
@@ -21,6 +22,7 @@ function parseTier(tierStr: string): SubscriptionTier | null {
 
 export default function PaymentSuccessPage() {
   const navigate = useNavigate();
+  const { actor } = useActor();
   const sessionId = getQueryParam("session_id");
   const tierStr = getQueryParam("tier");
   const tier = parseTier(tierStr);
@@ -46,7 +48,19 @@ export default function PaymentSuccessPage() {
 
       upgradeSubscription
         .mutateAsync(tier)
-        .then(() => {
+        .then(async () => {
+          // Complete onboarding if not already completed
+          if (actor) {
+            try {
+              const onboardingState = await actor.getMyOnboardingState();
+              if (onboardingState && onboardingState.completedAt.length === 0) {
+                await actor.updateOnboardingStep(3n);
+                await actor.completeOnboarding();
+              }
+            } catch {
+              // Non-fatal: onboarding completion is best-effort on payment path
+            }
+          }
           setUpgradeState("done");
           setTimeout(() => {
             navigate({ to: "/" });
@@ -66,7 +80,7 @@ export default function PaymentSuccessPage() {
       );
       setUpgradeState("error");
     }
-  }, [sessionStatus, tier, upgradeState, navigate, upgradeSubscription]);
+  }, [sessionStatus, tier, upgradeState, navigate, upgradeSubscription, actor]);
 
   if (!sessionId || !tier) {
     return (

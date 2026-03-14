@@ -74,6 +74,12 @@ export interface PlatformConfig {
     accentColor: string;
     platformName: string;
 }
+export interface OnboardingState {
+    principal: Principal;
+    completedAt: [] | [bigint];
+    skippedAt: [] | [bigint];
+    lastStepReached: bigint;
+}
 export interface http_request_result {
     status: bigint;
     body: Uint8Array;
@@ -180,6 +186,13 @@ export enum UserRole {
 export interface backendInterface {
     addProjectMember(projectId: bigint, member: Principal, role: ProjectRole): Promise<void>;
     assignCallerUserRole(user: Principal, role: UserRole): Promise<void>;
+    completeOnboarding(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     createAsset(projectId: bigint, name: string, description: string): Promise<bigint>;
     createCheckoutSession(items: Array<ShoppingItem>, successUrl: string, cancelUrl: string): Promise<string>;
     createCollection(projectId: bigint, name: string, description: string, assetIds: Array<bigint>): Promise<bigint>;
@@ -207,6 +220,7 @@ export interface backendInterface {
     getCollection(id: bigint): Promise<Collection | null>;
     getFileMetadata(id: bigint): Promise<FileMetadata | null>;
     getMergeOperation(id: bigint): Promise<MergeOperation | null>;
+    getMyOnboardingState(): Promise<OnboardingState | null>;
     getMySubscription(): Promise<UserSubscription | null>;
     getPlatformConfig(): Promise<PlatformConfig | null>;
     getProject(id: bigint): Promise<Project | null>;
@@ -257,10 +271,24 @@ export interface backendInterface {
         Err: string;
     }>;
     setStripeConfiguration(config: StripeConfiguration): Promise<void>;
+    skipOnboarding(): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     storeFileMetadata(projectId: bigint, assetId: bigint | null, filename: string, mimeType: string, size: bigint, hash: string): Promise<bigint>;
     transform(input: TransformationInput): Promise<TransformationOutput>;
     updateAsset(id: bigint, name: string, description: string): Promise<void>;
     updateCollection(id: bigint, name: string, description: string, assetIds: Array<bigint>): Promise<void>;
+    updateOnboardingStep(step: bigint): Promise<{
+        __kind__: "Ok";
+        Ok: null;
+    } | {
+        __kind__: "Err";
+        Err: string;
+    }>;
     updateProject(id: bigint, name: string, description: string): Promise<void>;
     updateProjectMemberRole(projectId: bigint, member: Principal, newRole: ProjectRole): Promise<void>;
     updateTask(id: bigint, name: string, description: string, status: string, assignedTo: Principal | null): Promise<void>;

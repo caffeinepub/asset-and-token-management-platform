@@ -156,6 +156,13 @@ export interface PlatformConfig {
     accentColor: string;
     platformName: string;
 }
+
+export interface OnboardingState {
+    principal: Principal;
+    completedAt: [] | [bigint];
+    skippedAt: [] | [bigint];
+    lastStepReached: bigint;
+}
 export interface http_request_result {
     status: bigint;
     body: Uint8Array;
@@ -290,6 +297,10 @@ export interface backendInterface {
     getCollection(id: bigint): Promise<Collection | null>;
     getFileMetadata(id: bigint): Promise<FileMetadata | null>;
     getMergeOperation(id: bigint): Promise<MergeOperation | null>;
+    completeOnboarding(): Promise<{ __kind__: "Ok"; Ok: null; } | { __kind__: "Err"; Err: string; }>;
+    getMyOnboardingState(): Promise<OnboardingState | null>;
+    skipOnboarding(): Promise<{ __kind__: "Ok"; Ok: null; } | { __kind__: "Err"; Err: string; }>;
+    updateOnboardingStep(step: bigint): Promise<{ __kind__: "Ok"; Ok: null; } | { __kind__: "Err"; Err: string; }>;
     getMySubscription(): Promise<UserSubscription | null>;
     getPlatformConfig(): Promise<PlatformConfig | null>;
     getProject(id: bigint): Promise<Project | null>;
@@ -1243,6 +1254,54 @@ export class Backend implements backendInterface {
         } else {
             const result = await this.actor.upgradeSubscription(to_candid_SubscriptionTier_n49(this._uploadFile, this._downloadFile, arg0));
             return from_candid_variant_n51(this._uploadFile, this._downloadFile, result);
+        }
+    }
+    async completeOnboarding(): Promise<{ __kind__: "Ok"; Ok: null; } | { __kind__: "Err"; Err: string; }> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).completeOnboarding();
+                return result.Ok !== undefined ? { __kind__: "Ok", Ok: null } : { __kind__: "Err", Err: result.Err ?? "Unknown error" };
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            const result = await (this.actor as any).completeOnboarding();
+            return result.Ok !== undefined ? { __kind__: "Ok", Ok: null } : { __kind__: "Err", Err: result.Err ?? "Unknown error" };
+        }
+    }
+    async getMyOnboardingState(): Promise<OnboardingState | null> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).getMyOnboardingState();
+                if (!result || result.length === 0) return null;
+                const s = result[0];
+                return { principal: s.principal, completedAt: s.completedAt, skippedAt: s.skippedAt, lastStepReached: s.lastStepReached };
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            const result = await (this.actor as any).getMyOnboardingState();
+            if (!result || result.length === 0) return null;
+            const s = result[0];
+            return { principal: s.principal, completedAt: s.completedAt, skippedAt: s.skippedAt, lastStepReached: s.lastStepReached };
+        }
+    }
+    async skipOnboarding(): Promise<{ __kind__: "Ok"; Ok: null; } | { __kind__: "Err"; Err: string; }> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).skipOnboarding();
+                return result.Ok !== undefined ? { __kind__: "Ok", Ok: null } : { __kind__: "Err", Err: result.Err ?? "Unknown error" };
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            const result = await (this.actor as any).skipOnboarding();
+            return result.Ok !== undefined ? { __kind__: "Ok", Ok: null } : { __kind__: "Err", Err: result.Err ?? "Unknown error" };
+        }
+    }
+    async updateOnboardingStep(step: bigint): Promise<{ __kind__: "Ok"; Ok: null; } | { __kind__: "Err"; Err: string; }> {
+        if (this.processError) {
+            try {
+                const result = await (this.actor as any).updateOnboardingStep(step);
+                return result.Ok !== undefined ? { __kind__: "Ok", Ok: null } : { __kind__: "Err", Err: result.Err ?? "Unknown error" };
+            } catch (e) { this.processError(e); throw new Error("unreachable"); }
+        } else {
+            const result = await (this.actor as any).updateOnboardingStep(step);
+            return result.Ok !== undefined ? { __kind__: "Ok", Ok: null } : { __kind__: "Err", Err: result.Err ?? "Unknown error" };
         }
     }
 }

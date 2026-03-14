@@ -153,6 +153,13 @@ actor {
     accentColor : Text;
   };
 
+  public type OnboardingState = {
+    principal : Principal;
+    completedAt : ?Int;
+    skippedAt : ?Int;
+    lastStepReached : Nat;
+  };
+
   ///////////////
   // STATE
 
@@ -170,6 +177,7 @@ actor {
   let auditLogs = Map.empty<Nat, AuditLog>();
   let projectMembers = Map.empty<Text, ProjectMember>();
   let subscriptions = Map.empty<Principal, UserSubscription>();
+  let onboardingStates = Map.empty<Principal, OnboardingState>();
 
   var nextProjectId = 1;
   var nextAssetId = 1;
@@ -876,6 +884,104 @@ actor {
     platformConfig := ?config;
     appendAuditLog(caller, "SET_PLATFORM_CONFIG", "platformConfig");
     #Ok(());
+  };
+
+  ////////////////////////
+  // ONBOARDING
+
+  public query ({ caller }) func getMyOnboardingState() : async ?OnboardingState {
+    if (caller.isAnonymous()) {
+      return null;
+    };
+    onboardingStates.get(caller);
+  };
+
+  public shared ({ caller }) func updateOnboardingStep(step : Nat) : async {
+    #Ok : ();
+    #Err : Text;
+  } {
+    if (caller.isAnonymous()) {
+      return #Err("Unauthorized: Must be authenticated");
+    };
+    if (step < 1 or step > 3) {
+      return #Err("Invalid step: must be 1, 2, or 3");
+    };
+    let existing = onboardingStates.get(caller);
+    let updated : OnboardingState = switch (existing) {
+      case (null) {
+        {
+          principal = caller;
+          completedAt = null;
+          skippedAt = null;
+          lastStepReached = step;
+        };
+      };
+      case (?s) {
+        {
+          s with lastStepReached = step;
+        };
+      };
+    };
+    onboardingStates.add(caller, updated);
+    #Ok(());
+  };
+
+  public shared ({ caller }) func completeOnboarding() : async {
+    #Ok : ();
+    #Err : Text;
+  } {
+    if (caller.isAnonymous()) {
+      return #Err("Unauthorized: Must be authenticated");
+    };
+    let existing = onboardingStates.get(caller);
+    let updated : OnboardingState = switch (existing) {
+      case (null) {
+        {
+          principal = caller;
+          completedAt = ?Time.now();
+          skippedAt = null;
+          lastStepReached = 3;
+        };
+      };
+      case (?s) {
+        {
+          s with
+          completedAt = ?Time.now();
+          lastStepReached = 3;
+        };
+      };
+    };
+    onboardingStates.add(caller, updated);
+    #Ok(());
+  };
+
+  public shared ({ caller }) func skipOnboarding() : async {
+    #Ok : ();
+    #Err : Text;
+  } {
+    if (caller.isAnonymous()) {
+      return #Err("Unauthorized: Must be authenticated");
+    };
+    let existing = onboardingStates.get(caller);
+    switch (existing) {
+      case (null) {
+        return #Err("Cannot skip: onboarding not yet completed");
+      };
+      case (?s) {
+        switch (s.completedAt) {
+          case (null) {
+            return #Err("Cannot skip: onboarding not yet completed");
+          };
+          case (?_) {
+            let updated : OnboardingState = {
+              s with skippedAt = ?Time.now();
+            };
+            onboardingStates.add(caller, updated);
+            return #Ok(());
+          };
+        };
+      };
+    };
   };
 
   ////////////////////////
